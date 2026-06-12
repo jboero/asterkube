@@ -47,6 +47,15 @@ func main() {
 		runContainer()
 		return
 	}
+	// When runc (or containerd) execs this binary as the container payload, it is
+	// PID 1 inside the container's PID namespace — this guard keeps it from
+	// recursing into the init logic. It just proves it is alive inside the
+	// container and exits.
+	if os.Getenv(runcPayloadEnv) != "" {
+		host, _ := os.Hostname()
+		fmt.Printf("runc-payload: hello from inside the container — pid=%d hostname=%q\n", os.Getpid(), host)
+		return
+	}
 	// A namespace-probe child re-execs this binary; when launched with
 	// CLONE_NEWPID it sees getpid()==1, so this guard must come first to keep it
 	// from recursing into the init logic.
@@ -99,6 +108,10 @@ func runAsInit() {
 	report(results)
 
 	probeKernel()
+
+	// Exercise the container-runtime substrate (overlayfs snapshot, runc,
+	// containerd) before the network pod tests.
+	runContainerRuntimeTests()
 
 	// Act as the node agent: run the static pods, exercising the kernel's
 	// namespace and cgroup support end-to-end.
