@@ -477,13 +477,18 @@ func runBridgedPods(specs []podSpec) {
 			continue
 		}
 		backend := spec.Network.PodIP
-		// UDP rule: VIP:vport -> backend:BackendPort.
-		if err := addServiceDNAT(serviceVIP, serviceVPort, backend, spec.Network.BackendPort, serviceProtoUDP); err != nil {
-			fmt.Printf("svc: FAILED to program udp DNAT %s:%d -> %s:%d: %v\n",
-				serviceVIP, serviceVPort, backend, spec.Network.BackendPort, err)
-		} else {
-			fmt.Printf("svc: DNAT udp %s:%d -> %s:%d programmed\n",
-				serviceVIP, serviceVPort, backend, spec.Network.BackendPort)
+		// UDP rule with TWO backend endpoints (BackendPort and BackendPort+2):
+		// a load-balanced Service backend set. The kernel pins each client flow
+		// to one endpoint by hash, so the set is spread across like kube-proxy
+		// spreads a Service over its endpoints.
+		for _, bport := range []int{spec.Network.BackendPort, spec.Network.BackendPort + 2} {
+			if err := addServiceDNAT(serviceVIP, serviceVPort, backend, bport, serviceProtoUDP); err != nil {
+				fmt.Printf("svc: FAILED to program udp DNAT %s:%d -> %s:%d: %v\n",
+					serviceVIP, serviceVPort, backend, bport, err)
+			} else {
+				fmt.Printf("svc: DNAT udp %s:%d -> %s:%d programmed\n",
+					serviceVIP, serviceVPort, backend, bport)
+			}
 		}
 		// TCP rule: same VIP:vport -> backend:BackendPort+1 (distinct rule, the
 		// engine keys on vip+vport+proto).

@@ -21,6 +21,7 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -113,54 +114,94 @@ func containerServiceTest(podIP string) {
 	}
 }
 
-// serviceBackend is the backend pod's half. It serves the VIP for both
-// protocols: UDP on BackendPort and TCP on BackendPort+1. The TCP listener is
-// opened first so its socket is already bound when the client's SYN arrives
-// (a SYN to an unbound port would be refused), then the UDP request is served,
-// then the TCP connection is accepted. The destination rewrite has already
-// happened in the bridge, so traffic arrives addressed to us; the VIP source
-// the client used is restored on the reply path by the bridge.
+// udpEndpointPorts returns the two UDP backend endpoints this pod serves:
+// BackendPort and BackendPort+2 (BackendPort+1 is reserved for TCP). Two
+// distinct endpoints let the test prove the NAT engine load-balances a VIP
+// across a backend set, the way kube-proxy spreads a Service over its endpoints.
+func udpEndpointPorts() []int {
+	base := backendListenPort()
+	return []int{base, base + 2}
+}
+
+// serviceBackend is the backend pod's half. It serves the VIP across several
+// endpoints concurrently: two UDP ports (a load-balanced Service backend set)
+// and one TCP port. Every listener is bound up front so no client packet is
+// refused, and all are served in parallel so a slow protocol never starves
+// another. The destination rewrite has already happened in the bridge, so
+// traffic arrives addressed to us; the VIP source the client used is restored
+// on the reply path by the bridge.
 func serviceBackend(podIP string) {
-	// Open the TCP listener up front so it is ready before any client SYN.
+	var wg sync.WaitGroup
+
+	// TCP endpoint on BackendPort+1.
 	tcpAddr := &net.TCPAddr{IP: net.ParseIP(podIP), Port: backendListenPort() + 1}
-	ln, lerr := net.ListenTCP("tcp", tcpAddr)
-	if lerr != nil {
+	if ln, lerr := net.ListenTCP("tcp", tcpAddr); lerr != nil {
 		fmt.Printf("svc-backend: FAILED to listen tcp %s: %v\n", tcpAddr, lerr)
 	} else {
-		defer ln.Close()
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer ln.Close()
+			serviceBackendTCP(ln)
+		}()
 	}
 
-	serviceBackendUDP(podIP)
+	// UDP load-balanced endpoints, each counting how many datagrams it served.
+	ports := udpEndpointPorts()
+	served := make([]int, len(ports))
+	for i, port := range ports {
+		wg.Add(1)
+		go func(i, port int) {
+			defer wg.Done()
+			served[i] = serviceBackendUDPEndpoint(podIP, port)
+		}(i, port)
+	}
+	wg.Wait()
 
-	if ln != nil {
-		serviceBackendTCP(ln)
+	// Load-balancing proof: every UDP endpoint must have served at least one
+	// datagram, i.e. the engine spread the client's flows across the set.
+	hit := 0
+	for i, n := range served {
+		fmt.Printf("svc-backend: udp endpoint :%d served %d\n", ports[i], n)
+		if n > 0 {
+			hit++
+		}
+	}
+	if hit == len(ports) {
+		fmt.Printf("svc-lb: OK all %d udp endpoints hit (load balanced)\n", len(ports))
+	} else {
+		fmt.Printf("svc-lb: FAILED only %d/%d udp endpoints hit\n", hit, len(ports))
 	}
 }
 
-// serviceBackendUDP serves one UDP datagram on BackendPort and echoes a reply
-// to its sender. Bind the pod's own address explicitly (the kernel's wildcard
-// listener has a known bug).
-func serviceBackendUDP(podIP string) {
-	port := backendListenPort()
+// serviceBackendUDPEndpoint serves one UDP backend endpoint: it binds the pod's
+// own address (the kernel's wildcard listener has a known bug) on the given
+// port and echoes a reply to every datagram until the flow goes idle. It
+// returns how many datagrams it served. A short per-read deadline lets it exit
+// promptly once the client has stopped sending.
+func serviceBackendUDPEndpoint(podIP string, port int) int {
 	conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP(podIP), Port: port})
 	if err != nil {
 		fmt.Printf("svc-backend: FAILED to bind udp %s:%d: %v\n", podIP, port, err)
-		return
+		return 0
 	}
 	defer conn.Close()
 
-	_ = conn.SetReadDeadline(time.Now().Add(12 * time.Second))
+	served := 0
 	buf := make([]byte, 256)
-	n, from, err := conn.ReadFromUDP(buf)
-	if err != nil {
-		fmt.Printf("svc-backend: no udp request (FAILED): %v\n", err)
-		return
+	for {
+		_ = conn.SetReadDeadline(time.Now().Add(4 * time.Second))
+		n, from, rerr := conn.ReadFromUDP(buf)
+		if rerr != nil {
+			return served // deadline: the client has stopped sending.
+		}
+		if _, werr := conn.WriteToUDP([]byte("svc-reply-from-backend"), from); werr != nil {
+			fmt.Printf("svc-backend: udp :%d FAILED to reply to %s: %v\n", port, from, werr)
+			return served
+		}
+		served++
+		fmt.Printf("svc-backend: udp :%d served %q to %s\n", port, string(buf[:n]), from)
 	}
-	if _, err := conn.WriteToUDP([]byte("svc-reply-from-backend"), from); err != nil {
-		fmt.Printf("svc-backend: FAILED to reply to %s: %v\n", from, err)
-		return
-	}
-	fmt.Printf("svc-backend: served udp %q to %s\n", string(buf[:n]), from)
 }
 
 // serviceBackendTCP accepts one connection on the already-bound listener, reads
@@ -190,10 +231,13 @@ func serviceBackendTCP(ln *net.TCPListener) {
 	fmt.Printf("svc-backend: served tcp %q to %s\n", string(buf[:n]), conn.RemoteAddr())
 }
 
-// serviceClient is the client pod's half: send to the VIP and verify the reply
-// comes back FROM the VIP (proving reverse-NAT), not from the backend IP. UDP
-// gives no delivery signal and the backend may still be binding, so it retries
-// up to 6 times, 1s apart, with a 2s read deadline each attempt.
+// serviceClient is the client pod's UDP half: it sends several datagrams to the
+// VIP, each over a *fresh* connection so each gets a new ephemeral source port.
+// Distinct source ports hash to different backends in the kernel, so the batch
+// exercises the whole backend set (the backend logs confirm the spread). Every
+// reply must come back FROM the VIP — a reply from a backend's real address
+// would mean reverse-NAT failed. The first datagram retries to absorb the
+// backend still binding.
 func serviceClient() {
 	vip := os.Getenv(svcVIPEnv)
 	vport := serviceVPort
@@ -207,39 +251,68 @@ func serviceClient() {
 	}
 	target := &net.UDPAddr{IP: vipIP, Port: vport}
 
+	const sends = 8
+	ok := 0
 	var lastErr string
-	for attempt := 1; attempt <= 6; attempt++ {
-		conn, err := net.DialUDP("udp", nil, target)
-		if err != nil {
-			lastErr = "dial: " + err.Error()
-		} else {
-			if _, werr := conn.Write([]byte("svc-hello")); werr != nil {
-				lastErr = "write: " + werr.Error()
-			} else {
-				_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-				buf := make([]byte, 256)
-				n, from, rerr := conn.ReadFromUDP(buf)
-				if rerr != nil {
-					lastErr = "read: " + rerr.Error()
-				} else if !from.IP.Equal(vipIP) {
-					// A reply that arrives from the backend's real address means
-					// the bridge did not rewrite the source — reverse-NAT failed.
-					conn.Close()
-					fmt.Printf("svc-client: FAILED reverse-NAT (reply from backend %s not VIP)\n", from.IP)
-					return
-				} else {
-					conn.Close()
-					fmt.Printf("svc-client: OK reply %q from %s\n", string(buf[:n]), from)
-					return
-				}
-			}
-			conn.Close()
+	for i := 0; i < sends; i++ {
+		// The first datagram may race the backend binding; give it a few tries.
+		tries := 1
+		if i == 0 {
+			tries = 5
 		}
-		if attempt < 6 {
-			time.Sleep(1 * time.Second)
+		for t := 0; t < tries; t++ {
+			result, err := serviceClientSendOnce(target, vipIP, i)
+			if err == reverseNATFailed {
+				fmt.Printf("svc-client: FAILED reverse-NAT (reply not from VIP)\n")
+				return
+			}
+			if err == nil {
+				ok++
+				_ = result
+				break
+			}
+			lastErr = err.Error()
+			if t < tries-1 {
+				time.Sleep(1 * time.Second)
+			}
 		}
 	}
-	fmt.Printf("svc-client: FAILED no reply from VIP after 6 attempts: %s\n", lastErr)
+
+	if ok == sends {
+		fmt.Printf("svc-client: OK %d/%d udp replies from VIP %s\n", ok, sends, vip)
+	} else {
+		fmt.Printf("svc-client: PARTIAL %d/%d udp replies from VIP (last err: %s)\n", ok, sends, lastErr)
+	}
+}
+
+// reverseNATFailed marks the one unrecoverable outcome: a reply arrived from a
+// backend's real address instead of the VIP, so the reverse rewrite is broken.
+var reverseNATFailed = fmt.Errorf("reverse-NAT failed")
+
+// serviceClientSendOnce sends one datagram to the VIP over a fresh connection
+// and reads the reply, verifying its source is the VIP. It returns the reply
+// payload on success, reverseNATFailed if the reply came from a non-VIP source,
+// or another error if the send/read failed.
+func serviceClientSendOnce(target *net.UDPAddr, vipIP net.IP, seq int) (string, error) {
+	conn, err := net.DialUDP("udp", nil, target)
+	if err != nil {
+		return "", fmt.Errorf("dial: %w", err)
+	}
+	defer conn.Close()
+
+	if _, werr := conn.Write([]byte(fmt.Sprintf("svc-hello-%d", seq))); werr != nil {
+		return "", fmt.Errorf("write: %w", werr)
+	}
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	buf := make([]byte, 256)
+	n, from, rerr := conn.ReadFromUDP(buf)
+	if rerr != nil {
+		return "", fmt.Errorf("read: %w", rerr)
+	}
+	if !from.IP.Equal(vipIP) {
+		return "", reverseNATFailed
+	}
+	return string(buf[:n]), nil
 }
 
 // serviceClientTCP is the client pod's TCP half: dial the VIP and exchange a
