@@ -53,6 +53,10 @@ const (
 // bridge, enabling the pod↔pod connectivity tests.
 const peerIPEnv = "ASTROKUBE_PEER_IP"
 
+// crossPingEnv passes a bridged pod the address of a pod on a *different*
+// bridge/subnet to probe, exercising the kernel's inter-bridge L3 router.
+const crossPingEnv = "ASTROKUBE_CROSS_PING"
+
 // vethUDPPort is the port used by the cross-namespace connectivity probe.
 const vethUDPPort = "9999"
 
@@ -82,6 +86,10 @@ type podNetwork struct {
 	ServiceVIP  string `json:"serviceVIP"`
 	BackendPort int    `json:"backendPort"`
 	ServiceRole string `json:"serviceRole"`
+	// CrossPingIP, if set, is the address of a pod on a *different* bridge/subnet
+	// that this pod probes — exercising the kernel's inter-bridge L3 router
+	// (host-namespace forwarding between pod subnets).
+	CrossPingIP string `json:"crossPingIP"`
 }
 
 // bridged reports whether the pod asks to be attached to a bridge.
@@ -324,9 +332,10 @@ func waitPod(spec podSpec, h *podHandle) {
 	// listen deadline), so they need a longer watchdog than a plain pod.
 	watchdog := 15 * time.Second
 	if spec.bridged() {
-		// Bridged pods run the peer, ICMP, and Service (UDP + TCP) tests in
-		// series before their final listen, so they need a longer watchdog.
-		watchdog = 45 * time.Second
+		// Bridged pods run the peer, ICMP, cross-subnet, and Service (UDP + TCP)
+		// tests in series before their final listen, under multi-pod load, so
+		// they need a generous watchdog.
+		watchdog = 60 * time.Second
 	}
 	done := make(chan error, 1)
 	go func() { done <- h.cmd.Wait() }()
@@ -533,6 +542,9 @@ func runBridgedPod(spec podSpec, bridgeIdx int) {
 	if spec.Network.PeerIP != "" {
 		netEnv = append(netEnv, peerIPEnv+"="+spec.Network.PeerIP)
 	}
+	if spec.Network.CrossPingIP != "" {
+		netEnv = append(netEnv, crossPingEnv+"="+spec.Network.CrossPingIP)
+	}
 	// Pass the Service DNAT context so the container knows the VIP to dial (or
 	// the port to serve) and which role to play.
 	if spec.Network.ServiceRole != "" {
@@ -647,6 +659,13 @@ func containerVethTest(podIP string) string {
 		containerServiceTest(podIP)
 	}
 
+	// If asked, probe a pod on a different bridge/subnet — this only succeeds if
+	// the kernel forwards between bridges in the host namespace (the inter-bridge
+	// L3 router), since no single bridge owns both subnets.
+	if cross := os.Getenv(crossPingEnv); cross != "" {
+		containerCrossPingTest(cross)
+	}
+
 	// Listen on our address before signaling readiness.
 	conn, err := net.ListenPacket("udp", podIP+":"+vethUDPPort)
 	if err != nil {
@@ -676,7 +695,31 @@ func containerVethTest(podIP string) string {
 // deterministic roles so exactly one side listens and the other sends.
 // Everything is bounded — a missing peer produces FAILED lines, not a hang.
 func containerPeerTest(podIP, peerIP string) {
-	// ICMP first: up to 3 attempts, 2s apart, to ride out peer startup skew.
+	// Roles by address order: the lower address listens, the higher one sends.
+	me, peer := net.ParseIP(podIP).To4(), net.ParseIP(peerIP).To4()
+	if me == nil || peer == nil {
+		fmt.Printf("pod-udp: FAILED to parse addresses %q / %q\n", podIP, peerIP)
+		return
+	}
+	listener := bytes.Compare(me, peer) < 0
+
+	// If we are the listener, bind the UDP socket *before* the ICMP exchange so
+	// the kernel buffers the peer's datagrams even if our read starts later.
+	// Otherwise the sender — which can run several seconds ahead under load —
+	// finishes sending before we listen and every datagram is lost (a real race
+	// the heavier multi-pod topology exposed).
+	var conn net.PacketConn
+	if listener {
+		c, err := net.ListenPacket("udp", podIP+":"+bridgeUDPPort)
+		if err != nil {
+			fmt.Printf("pod-udp: FAILED to bind %s: %v\n", podIP, err)
+		} else {
+			conn = c
+			defer conn.Close()
+		}
+	}
+
+	// ICMP: up to 3 attempts, 2s apart, to ride out peer startup skew.
 	var res string
 	for attempt := 1; attempt <= 3; attempt++ {
 		res = icmpPingTest(peerIP)
@@ -689,29 +732,40 @@ func containerPeerTest(podIP, peerIP string) {
 	}
 	fmt.Printf("peer icmp: %s\n", res)
 
-	// Roles by address order: the lower address listens, the higher one sends.
-	me, peer := net.ParseIP(podIP).To4(), net.ParseIP(peerIP).To4()
-	if me == nil || peer == nil {
-		fmt.Printf("pod-udp: FAILED to parse addresses %q / %q\n", podIP, peerIP)
-		return
-	}
-	if bytes.Compare(me, peer) < 0 {
-		podUDPListen(podIP)
+	if listener {
+		if conn != nil {
+			podUDPReceive(conn, podIP)
+		}
 	} else {
 		podUDPSend(peerIP)
 	}
 }
 
-// podUDPListen is the lower-addressed bridged pod's half of the pod↔pod UDP
-// test: bind the pod address and wait (bounded) for the peer's datagram.
-func podUDPListen(podIP string) {
-	conn, err := net.ListenPacket("udp", podIP+":"+bridgeUDPPort)
-	if err != nil {
-		fmt.Printf("pod-udp: FAILED to bind %s: %v\n", podIP, err)
-		return
+// containerCrossPingTest pings a pod on a different bridge/subnet. It succeeds
+// only if the kernel's inter-bridge router forwards the echo across subnets and
+// the reply back; the target's kernel ICMP responder answers automatically, so
+// no coordination with the target's application is needed. It retries to ride
+// out the peer and both bridges coming up.
+func containerCrossPingTest(crossIP string) {
+	var res string
+	for attempt := 1; attempt <= 6; attempt++ {
+		res = icmpPingTest(crossIP)
+		if strings.HasPrefix(res, "ok") {
+			break
+		}
+		if attempt < 6 {
+			time.Sleep(2 * time.Second)
+		}
 	}
-	defer conn.Close()
-	_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+	fmt.Printf("cross-subnet icmp %s: %s\n", crossIP, res)
+}
+
+// podUDPReceive is the lower-addressed bridged pod's half of the pod↔pod UDP
+// test: read (bounded) the peer's datagram from a socket bound earlier by
+// containerPeerTest, so datagrams that arrived before this read are already
+// buffered.
+func podUDPReceive(conn net.PacketConn, podIP string) {
+	_ = conn.SetReadDeadline(time.Now().Add(12 * time.Second))
 	buf := make([]byte, 128)
 	n, from, err := conn.ReadFrom(buf)
 	if err != nil {
@@ -722,19 +776,21 @@ func podUDPListen(podIP string) {
 }
 
 // podUDPSend is the higher-addressed bridged pod's half of the pod↔pod UDP
-// test. UDP gives no delivery signal, so it sends up to 5 datagrams 1s apart —
-// covering the window before the peer has bound — and reports the outcome.
+// test. UDP gives no delivery signal, so it sends 10 datagrams 1s apart —
+// covering a wide startup-skew window before the peer has bound — and reports
+// the outcome. The peer binds before its own ICMP exchange, so even early
+// datagrams are buffered.
 func podUDPSend(peerIP string) {
 	addr := peerIP + ":" + bridgeUDPPort
 	sent := false
-	for attempt := 1; attempt <= 5; attempt++ {
+	for attempt := 1; attempt <= 10; attempt++ {
 		if conn, err := net.Dial("udp", addr); err == nil {
 			if _, werr := conn.Write([]byte("bridged-hello")); werr == nil {
 				sent = true
 			}
 			conn.Close()
 		}
-		if attempt < 5 {
+		if attempt < 10 {
 			time.Sleep(1 * time.Second)
 		}
 	}
@@ -742,7 +798,7 @@ func podUDPSend(peerIP string) {
 		fmt.Printf("pod-udp: sent to %s\n", addr)
 		return
 	}
-	fmt.Printf("pod-udp: FAILED to send to %s after 5 attempts\n", addr)
+	fmt.Printf("pod-udp: FAILED to send to %s after 10 attempts\n", addr)
 }
 
 // hostSideVethPing waits for the veth pod's container to create the veth and

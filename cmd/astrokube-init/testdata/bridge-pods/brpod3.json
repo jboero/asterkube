@@ -1,0 +1,14 @@
+{
+  "name": "brpod3",
+  "hostname": "brpod3",
+  "command": ["/usr/bin/kubelet"],
+  "env": ["ASTROKUBE_CONTAINER=1"],
+  "resources": {"memoryMaxMiB": 128, "cpuMaxPercent": 50},
+  "network": {
+    "bridge": "br1",
+    "gatewayIP": "10.244.2.1",
+    "prefix": 24,
+    "podIP": "10.244.2.2",
+    "crossPingIP": "10.244.1.2"
+  }
+}
