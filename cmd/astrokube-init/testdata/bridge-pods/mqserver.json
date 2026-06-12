@@ -1,0 +1,15 @@
+{
+  "name": "mqserver",
+  "hostname": "mqserver",
+  "command": ["/usr/bin/kubelet"],
+  "env": ["ASTROKUBE_CONTAINER=1"],
+  "resources": {"memoryMaxMiB": 128, "cpuMaxPercent": 50},
+  "network": {
+    "bridge": "bre",
+    "gatewayIP": "192.168.99.1",
+    "prefix": 24,
+    "podIP": "192.168.99.50",
+    "uplink": true,
+    "masqRole": "server"
+  }
+}

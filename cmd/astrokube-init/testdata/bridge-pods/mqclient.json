@@ -1,0 +1,15 @@
+{
+  "name": "mqclient",
+  "hostname": "mqclient",
+  "command": ["/usr/bin/kubelet"],
+  "env": ["ASTROKUBE_CONTAINER=1"],
+  "resources": {"memoryMaxMiB": 128, "cpuMaxPercent": 50},
+  "network": {
+    "bridge": "br2",
+    "gatewayIP": "10.244.3.1",
+    "prefix": 24,
+    "podIP": "10.244.3.2",
+    "masqRole": "client",
+    "masqTarget": "192.168.99.50"
+  }
+}

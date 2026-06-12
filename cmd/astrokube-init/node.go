@@ -90,6 +90,12 @@ type podNetwork struct {
 	// that this pod probes — exercising the kernel's inter-bridge L3 router
 	// (host-namespace forwarding between pod subnets).
 	CrossPingIP string `json:"crossPingIP"`
+	// Masquerade (source NAT) fields. Uplink marks this pod's bridge as a
+	// masquerade uplink; MasqRole is "client" or "server"; MasqTarget is the
+	// uplink server address the client dials.
+	Uplink     bool   `json:"uplink"`
+	MasqRole   string `json:"masqRole"`
+	MasqTarget string `json:"masqTarget"`
 }
 
 // bridged reports whether the pod asks to be attached to a bridge.
@@ -474,6 +480,16 @@ func runBridgedPods(specs []podSpec) {
 		}
 		bridgeIdx[name] = idx
 		fmt.Printf("bridge: created %s idx=%d gw=%s/%d\n", name, idx, spec.Network.GatewayIP, spec.Network.Prefix)
+
+		// Mark a masquerade uplink: traffic the router forwards onto this bridge
+		// is source-NATed to its gateway address.
+		if spec.Network.Uplink {
+			if err := addMasqUplink(idx); err != nil {
+				fmt.Printf("masq: FAILED to mark %s (idx=%d) as uplink: %v\n", name, idx, err)
+			} else {
+				fmt.Printf("masq: bridge %s (idx=%d) marked as masquerade uplink\n", name, idx)
+			}
+		}
 	}
 
 	// Program the Service DNAT (ClusterIP) rule once, before the pods send any
@@ -544,6 +560,15 @@ func runBridgedPod(spec podSpec, bridgeIdx int) {
 	}
 	if spec.Network.CrossPingIP != "" {
 		netEnv = append(netEnv, crossPingEnv+"="+spec.Network.CrossPingIP)
+	}
+	// Masquerade context: the server checks the uplink gateway it should see as
+	// the masqueraded source; the client is told the uplink server to reach.
+	if spec.Network.MasqRole != "" {
+		netEnv = append(netEnv,
+			masqRoleEnv+"="+spec.Network.MasqRole,
+			masqUplinkGwEnv+"="+spec.Network.GatewayIP,
+			masqTargetEnv+"="+spec.Network.MasqTarget,
+		)
 	}
 	// Pass the Service DNAT context so the container knows the VIP to dial (or
 	// the port to serve) and which role to play.
@@ -664,6 +689,13 @@ func containerVethTest(podIP string) string {
 	// L3 router), since no single bridge owns both subnets.
 	if cross := os.Getenv(crossPingEnv); cross != "" {
 		containerCrossPingTest(cross)
+	}
+
+	// If asked, exercise masquerade (source NAT): a pod-subnet client reaches an
+	// uplink server, which must see the traffic from the uplink address, not the
+	// pod's real IP, and the reply must find its way back to the pod.
+	if os.Getenv(masqRoleEnv) != "" {
+		containerMasqTest(podIP)
 	}
 
 	// Listen on our address before signaling readiness.
