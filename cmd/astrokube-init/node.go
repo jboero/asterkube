@@ -76,6 +76,12 @@ type podNetwork struct {
 	Bridge    string `json:"bridge"`
 	GatewayIP string `json:"gatewayIP"`
 	PeerIP    string `json:"peerIP"`
+	// Service DNAT (kube-proxy-style ClusterIP) fields. ServiceRole is "client"
+	// or "backend"; the backend advertises the VIP it serves and the port the
+	// kernel DNATs to.
+	ServiceVIP  string `json:"serviceVIP"`
+	BackendPort int    `json:"backendPort"`
+	ServiceRole string `json:"serviceRole"`
 }
 
 // bridged reports whether the pod asks to be attached to a bridge.
@@ -313,18 +319,25 @@ func (h *podHandle) signalVethCreated() {
 // node: it is bounded by a watchdog, and the pod's cgroup is removed afterward.
 func waitPod(spec podSpec, h *podHandle) {
 	defer os.Remove(h.cgroup)
+	// Bridged pods run a long chain of sequential network sub-tests (gateway
+	// and peer ICMP, peer UDP, then the Service round-trip with its own
+	// listen deadline), so they need a longer watchdog than a plain pod.
+	watchdog := 15 * time.Second
+	if spec.bridged() {
+		watchdog = 35 * time.Second
+	}
 	done := make(chan error, 1)
 	go func() { done <- h.cmd.Wait() }()
 	var waitErr error
 	select {
 	case waitErr = <-done:
-	case <-time.After(15 * time.Second):
+	case <-time.After(watchdog):
 		_ = h.cmd.Process.Kill()
 		// Don't block the node indefinitely if the kill doesn't reap promptly.
 		select {
 		case waitErr = <-done:
 		case <-time.After(2 * time.Second):
-			waitErr = fmt.Errorf("timed out after 15s (kill did not reap)")
+			waitErr = fmt.Errorf("timed out after %s (kill did not reap)", watchdog)
 		}
 	}
 
@@ -452,6 +465,26 @@ func runBridgedPods(specs []podSpec) {
 		fmt.Printf("bridge: created %s idx=%d gw=%s/%d\n", name, idx, spec.Network.GatewayIP, spec.Network.Prefix)
 	}
 
+	// Program the Service DNAT (ClusterIP) rule once, before the pods send any
+	// traffic. The node runs as PID 1 with CAP_NET_ADMIN, so it owns the prctl;
+	// the backend pod IP comes from whichever bridged spec is the backend. Both
+	// pods ping the gateway early in containerVethTest, so the backend's IP is
+	// already learned on its bridge port by the time the client sends.
+	for _, spec := range specs {
+		if spec.Network.ServiceRole != "backend" {
+			continue
+		}
+		backend := spec.Network.PodIP
+		if err := addServiceDNAT(serviceVIP, serviceVPort, backend, spec.Network.BackendPort, serviceProto); err != nil {
+			fmt.Printf("svc: FAILED to program DNAT %s:%d -> %s:%d: %v\n",
+				serviceVIP, serviceVPort, backend, spec.Network.BackendPort, err)
+		} else {
+			fmt.Printf("svc: DNAT %s:%d -> %s:%d programmed\n",
+				serviceVIP, serviceVPort, backend, spec.Network.BackendPort)
+		}
+		break
+	}
+
 	// Start every bridged pod concurrently; each goroutine carries the usual
 	// 15s-per-pod watchdog, so the whole group stays bounded.
 	var wg sync.WaitGroup
@@ -481,6 +514,16 @@ func runBridgedPod(spec podSpec, bridgeIdx int) {
 	}
 	if spec.Network.PeerIP != "" {
 		netEnv = append(netEnv, peerIPEnv+"="+spec.Network.PeerIP)
+	}
+	// Pass the Service DNAT context so the container knows the VIP to dial (or
+	// the port to serve) and which role to play.
+	if spec.Network.ServiceRole != "" {
+		netEnv = append(netEnv,
+			svcRoleEnv+"="+spec.Network.ServiceRole,
+			svcVIPEnv+"="+serviceVIP,
+			fmt.Sprintf("%s=%d", svcVPortEnv, serviceVPort),
+			fmt.Sprintf("%s=%d", svcBackendPortEnv, spec.Network.BackendPort),
+		)
 	}
 	h := startPodContainer(spec, netEnv)
 	if h == nil {
@@ -577,6 +620,13 @@ func containerVethTest(podIP string) string {
 	// same bridge, so traffic between them flows through the bridge hub.
 	if peer := os.Getenv(peerIPEnv); peer != "" {
 		containerPeerTest(podIP, peer)
+	}
+
+	// After the peer tests, exercise the Service DNAT (ClusterIP) path: the
+	// backend serves the VIP, the client dials it and verifies the reply's
+	// source is the VIP (reverse-NAT), not the backend's real address.
+	if os.Getenv(svcRoleEnv) != "" {
+		containerServiceTest(podIP)
 	}
 
 	// Listen on our address before signaling readiness.
