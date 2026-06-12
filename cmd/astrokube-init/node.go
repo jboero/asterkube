@@ -324,7 +324,9 @@ func waitPod(spec podSpec, h *podHandle) {
 	// listen deadline), so they need a longer watchdog than a plain pod.
 	watchdog := 15 * time.Second
 	if spec.bridged() {
-		watchdog = 35 * time.Second
+		// Bridged pods run the peer, ICMP, and Service (UDP + TCP) tests in
+		// series before their final listen, so they need a longer watchdog.
+		watchdog = 45 * time.Second
 	}
 	done := make(chan error, 1)
 	go func() { done <- h.cmd.Wait() }()
@@ -475,12 +477,23 @@ func runBridgedPods(specs []podSpec) {
 			continue
 		}
 		backend := spec.Network.PodIP
-		if err := addServiceDNAT(serviceVIP, serviceVPort, backend, spec.Network.BackendPort, serviceProto); err != nil {
-			fmt.Printf("svc: FAILED to program DNAT %s:%d -> %s:%d: %v\n",
+		// UDP rule: VIP:vport -> backend:BackendPort.
+		if err := addServiceDNAT(serviceVIP, serviceVPort, backend, spec.Network.BackendPort, serviceProtoUDP); err != nil {
+			fmt.Printf("svc: FAILED to program udp DNAT %s:%d -> %s:%d: %v\n",
 				serviceVIP, serviceVPort, backend, spec.Network.BackendPort, err)
 		} else {
-			fmt.Printf("svc: DNAT %s:%d -> %s:%d programmed\n",
+			fmt.Printf("svc: DNAT udp %s:%d -> %s:%d programmed\n",
 				serviceVIP, serviceVPort, backend, spec.Network.BackendPort)
+		}
+		// TCP rule: same VIP:vport -> backend:BackendPort+1 (distinct rule, the
+		// engine keys on vip+vport+proto).
+		tcpBackendPort := spec.Network.BackendPort + 1
+		if err := addServiceDNAT(serviceVIP, serviceVPort, backend, tcpBackendPort, serviceProtoTCP); err != nil {
+			fmt.Printf("svc: FAILED to program tcp DNAT %s:%d -> %s:%d: %v\n",
+				serviceVIP, serviceVPort, backend, tcpBackendPort, err)
+		} else {
+			fmt.Printf("svc: DNAT tcp %s:%d -> %s:%d programmed\n",
+				serviceVIP, serviceVPort, backend, tcpBackendPort)
 		}
 		break
 	}
