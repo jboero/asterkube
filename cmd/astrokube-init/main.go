@@ -117,6 +117,10 @@ func runAsInit() {
 	// namespace and cgroup support end-to-end.
 	runNodeAgent()
 
+	// Gating experiment for joining a real cluster: can eth0 carry outbound TCP
+	// to reach a kube-apiserver?
+	probeOutboundTCP()
+
 	fmt.Println()
 	fmt.Println("astrokube-init: node work complete. Powering off.")
 	powerOff()
