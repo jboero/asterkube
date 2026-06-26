@@ -182,6 +182,11 @@ func startContainerdDaemon(containerd, ctr string) {
 	// the full stack: content store (bbolt), overlay snapshotter, the
 	// runtime-v2 shim, and runc as the task.
 	ctrImportAndRun(ctr, sock, env, logPath)
+
+	// Step 5: drive containerd through the CRI (Container Runtime Interface) the
+	// way a kubelet would — a pod sandbox plus a container — using crictl. This
+	// is Layer 1 of the cluster-join path.
+	criPhase(ctr, filepath.Join(virtiofsMount, "crictl"), sock, env, logPath)
 }
 
 const (
