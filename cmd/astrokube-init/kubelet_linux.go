@@ -38,12 +38,19 @@ func kubeletPhase(kubeletBin, crictlBin, sock string, env []string) {
 		return
 	}
 
-	for _, d := range []string{"/etc/kubernetes/manifests", "/var/lib/kubelet"} {
+	for _, d := range []string{"/etc/kubernetes/manifests", "/run/kubelet"} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			fmt.Printf("kubelet: FAILED mkdir %s: %v\n", d, err)
 			return
 		}
 	}
+
+	// Node files the kubelet expects but the minimal node lacks. /dev/kmsg backs
+	// the kubelet's kernel-log OOM watcher; Asterinas has no kmsg device, so
+	// point it at /dev/null (open succeeds, reads hit EOF and the watcher
+	// harmlessly exits). /etc/machine-id is the node's stable identity.
+	_ = os.Symlink("/dev/null", "/dev/kmsg")
+	_ = os.WriteFile("/etc/machine-id", []byte("0a57e1b1a5f34c0e9b00000000000001\n"), 0o444)
 	if err := os.WriteFile("/etc/kubernetes/manifests/hello.yaml", []byte(staticPodManifest), 0o644); err != nil {
 		fmt.Printf("kubelet: FAILED to write static pod: %v\n", err)
 		return
@@ -61,7 +68,7 @@ func kubeletPhase(kubeletBin, crictlBin, sock string, env []string) {
 		"--container-runtime-endpoint=unix://" + sock,
 		"--image-service-endpoint=unix://" + sock,
 		"--pod-manifest-path=/etc/kubernetes/manifests",
-		"--root-dir=/var/lib/kubelet",
+		"--root-dir=/run/kubelet",
 		// Keep cgroup management minimal — don't build the QoS hierarchy or
 		// enforce allocatable, which exercise more of the cgroup surface.
 		"--cgroup-driver=cgroupfs",
