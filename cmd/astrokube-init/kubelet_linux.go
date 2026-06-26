@@ -38,7 +38,16 @@ func kubeletPhase(kubeletBin, crictlBin, sock string, env []string) {
 		return
 	}
 
-	for _, d := range []string{"/etc/kubernetes/manifests", "/run/kubelet"} {
+	// The kubelet's --root-dir MUST live on a real block-backed filesystem
+	// (ext2 on /dev/vda, mounted at /ext2). cAdvisor stats this dir to learn the
+	// node's rootfs device and looks the resulting st_dev (major:minor) up in the
+	// partition map it builds from /proc/self/mountinfo. On a tmpfs/ramfs root-dir
+	// the st_dev is an anonymous (major 0) id that matches no block device, and
+	// the kubelet aborts ContainerManager with "failed to get rootfs info ...
+	// could not find device in cached partitions map". ext2 reports vda's real
+	// numbers, which now also appear in mountinfo.
+	const kubeletRoot = "/ext2/kubelet"
+	for _, d := range []string{"/etc/kubernetes/manifests", kubeletRoot} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			fmt.Printf("kubelet: FAILED mkdir %s: %v\n", d, err)
 			return
@@ -68,7 +77,7 @@ func kubeletPhase(kubeletBin, crictlBin, sock string, env []string) {
 		"--container-runtime-endpoint=unix://" + sock,
 		"--image-service-endpoint=unix://" + sock,
 		"--pod-manifest-path=/etc/kubernetes/manifests",
-		"--root-dir=/run/kubelet",
+		"--root-dir=" + kubeletRoot,
 		// Keep cgroup management minimal — don't build the QoS hierarchy or
 		// enforce allocatable, which exercise more of the cgroup surface.
 		"--cgroup-driver=cgroupfs",
