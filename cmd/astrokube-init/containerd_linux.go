@@ -186,7 +186,11 @@ func startContainerdDaemon(containerd, ctr string) {
 	// Step 5: drive containerd through the CRI (Container Runtime Interface) the
 	// way a kubelet would — a pod sandbox plus a container — using crictl. This
 	// is Layer 1 of the cluster-join path.
-	criPhase(ctr, filepath.Join(virtiofsMount, "crictl"), sock, env, logPath)
+	crictl := filepath.Join(virtiofsMount, "crictl")
+	criPhase(ctr, crictl, sock, env, logPath)
+
+	// Step 6: run the REAL kubelet in standalone mode against this CRI (Layer 2).
+	kubeletPhase(filepath.Join(virtiofsMount, "kubelet"), crictl, sock, env)
 }
 
 const (
