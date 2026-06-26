@@ -177,6 +177,56 @@ func startContainerdDaemon(containerd, ctr string) {
 		return
 	}
 	fmt.Println("containerd: daemon serves the API over AF_UNIX (ctr version OK)")
+
+	// Step 4: import a side-loaded image and run it under containerd. This drives
+	// the full stack: content store (bbolt), overlay snapshotter, the
+	// runtime-v2 shim, and runc as the task.
+	ctrImportAndRun(ctr, sock, env, logPath)
+}
+
+const (
+	ctrNamespace = "default"
+	helloImage   = "docker.io/astrokube/hello:latest"
+	helloTar     = virtiofsMount + "/hello.tar"
+)
+
+// ctrImportAndRun imports the side-loaded OCI image and runs a container from it.
+func ctrImportAndRun(ctr, sock string, env []string, logPath string) {
+	if _, err := os.Stat(helloTar); err != nil {
+		fmt.Printf("containerd: SKIPPED `ctr run` (no image %s: %v)\n", helloTar, err)
+		return
+	}
+	base := []string{"--address", sock, "-n", ctrNamespace}
+
+	// Import the image into the content store.
+	runCtr := func(timeout time.Duration, label string, args ...string) (string, bool) {
+		out, err := runWithTimeoutEnv(timeout, env, ctr, append(base, args...)...)
+		for _, line := range splitLines(out) {
+			if line != "" {
+				fmt.Printf("ctr| %s\n", line)
+			}
+		}
+		if err != nil {
+			fmt.Printf("containerd: FAILED %s: %v\n", label, err)
+			fmt.Println("containerd: daemon log tail:")
+			dumpTail(logPath, 50)
+			return out, false
+		}
+		return out, true
+	}
+
+	// `ctr images import` imports into the bbolt content store AND unpacks the
+	// layers into the snapshotter in one step.
+	if _, ok := runCtr(30*time.Second, "ctr images import", "images", "import", helloTar); !ok {
+		return
+	}
+	fmt.Println("containerd: image imported + unpacked into the overlay snapshotter")
+
+	// Run the container: shim spawn -> runc -> the static /hello entrypoint.
+	if _, ok := runCtr(45*time.Second, "ctr run", "run", "--rm", helloImage, "hello-test"); !ok {
+		return
+	}
+	fmt.Println("containerd: PHASE 2 PASSED — container ran under containerd via the runc shim")
 }
 
 // dumpTail prints the last n lines of a file with a "  log| " prefix.
