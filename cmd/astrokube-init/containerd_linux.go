@@ -94,14 +94,119 @@ func containerdPhase2() {
 		fmt.Printf("containerd: FAILED to run `containerd --version`: %v\n", err)
 		return
 	}
-	fmt.Println("containerd: binary runs on Asterinas (daemon bring-up next)")
+	fmt.Println("containerd: binary runs on Asterinas")
+
+	// Step 3: start the daemon and talk to it with ctr over its AF_UNIX socket.
+	ctr := filepath.Join(virtiofsMount, "ctr")
+	startContainerdDaemon(containerd, ctr)
+}
+
+// startContainerdDaemon launches containerd, waits for its control socket, and
+// runs `ctr version` against it to prove the gRPC/ttrpc API works over AF_UNIX.
+func startContainerdDaemon(containerd, ctr string) {
+	root := "/run/containerd/root"   // image/content store
+	state := "/run/containerd/state" // ephemeral runtime state
+	sock := "/run/containerd/containerd.sock"
+	logPath := "/run/containerd/containerd.log"
+	for _, d := range []string{root, state} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			fmt.Printf("containerd: FAILED mkdir %s: %v\n", d, err)
+			return
+		}
+	}
+
+	logFile, err := os.Create(logPath)
+	if err != nil {
+		fmt.Printf("containerd: FAILED to create daemon log: %v\n", err)
+		return
+	}
+	defer logFile.Close()
+
+	// PATH must reach runc (initramfs /usr/bin) and the shim (virtio-fs share).
+	env := []string{
+		"PATH=/usr/bin:/bin:" + virtiofsMount,
+		"LD_LIBRARY_PATH=/lib64",
+		"XDG_RUNTIME_DIR=/run",
+		"TMPDIR=/tmp",
+	}
+	daemon := exec.Command(containerd,
+		"--root", root, "--state", state, "--address", sock, "--log-level", "debug")
+	daemon.Env = env
+	daemon.Stdout = logFile
+	daemon.Stderr = logFile
+	if err := daemon.Start(); err != nil {
+		fmt.Printf("containerd: FAILED to start daemon: %v\n", err)
+		return
+	}
+	defer func() {
+		_ = daemon.Process.Kill()
+		_, _ = daemon.Process.Wait()
+	}()
+
+	// Wait for the control socket to appear (daemon ready).
+	ready := false
+	for i := 0; i < 100; i++ {
+		if _, err := os.Stat(sock); err == nil {
+			ready = true
+			break
+		}
+		// If the daemon died early, stop waiting.
+		if daemon.ProcessState != nil && daemon.ProcessState.Exited() {
+			break
+		}
+		time.Sleep(150 * time.Millisecond)
+	}
+	if !ready {
+		fmt.Println("containerd: daemon socket never appeared; daemon log:")
+		dumpTail(logPath, 40)
+		return
+	}
+	fmt.Printf("containerd: daemon up, socket %s present\n", sock)
+
+	// Talk to the daemon: `ctr version` exercises the client→daemon API path.
+	out, err := runWithTimeoutEnv(15*time.Second, env, ctr, "--address", sock, "version")
+	for _, line := range splitLines(out) {
+		if line != "" {
+			fmt.Printf("ctr| %s\n", line)
+		}
+	}
+	if err != nil {
+		fmt.Printf("containerd: FAILED `ctr version`: %v\n", err)
+		fmt.Println("containerd: daemon log tail:")
+		dumpTail(logPath, 40)
+		return
+	}
+	fmt.Println("containerd: daemon serves the API over AF_UNIX (ctr version OK)")
+}
+
+// dumpTail prints the last n lines of a file with a "  log| " prefix.
+func dumpTail(path string, n int) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		fmt.Printf("  (could not read %s: %v)\n", path, err)
+		return
+	}
+	lines := splitLines(string(data))
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	for _, line := range lines {
+		if line != "" {
+			fmt.Printf("  log| %s\n", line)
+		}
+	}
 }
 
 // runWithTimeout runs a command, returning its combined output, killing it if it
 // exceeds d.
 func runWithTimeout(d time.Duration, name string, args ...string) (string, error) {
+	return runWithTimeoutEnv(d, []string{"PATH=/usr/bin:/bin", "LD_LIBRARY_PATH=/lib64"}, name, args...)
+}
+
+// runWithTimeoutEnv is runWithTimeout with an explicit environment.
+func runWithTimeoutEnv(d time.Duration, env []string, name string, args ...string) (string, error) {
 	cmd := exec.Command(name, args...)
-	cmd.Env = []string{"PATH=/usr/bin:/bin", "LD_LIBRARY_PATH=/lib64"}
+	cmd.Env = env
 	done := make(chan struct{})
 	var out []byte
 	var runErr error
