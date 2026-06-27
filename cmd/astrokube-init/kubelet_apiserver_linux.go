@@ -31,7 +31,7 @@ const nodeName = "astrokube"
 // serveWindow is how long the node stays up after registering, so the control
 // plane can mark it Ready and the scheduler can place a pod on it (and the host
 // can observe). The window ends early once a scheduled container starts.
-const serveWindow = 180 * time.Second
+const serveWindow = 240 * time.Second
 
 // apiserverPhase runs the REAL kubelet connected to a real Kubernetes apiserver
 // (Layer 3a of the cluster-join path). Unlike the standalone phase, this kubelet
@@ -57,6 +57,14 @@ func apiserverPhase(kubeletBin, sock, kubeconfig string, env []string) {
 	}
 
 	const kubeletRoot = "/ext2/kubelet-apiserver"
+	// The kubelet root-dir lives on the ext2 disk, which the host reformats fresh
+	// each boot (astrokube/fresh-ext2.sh) because this node is ephemeral. A
+	// persistent root-dir across unclean poweroffs left half-written manager
+	// checkpoints (e.g. DRA's dra_manager_state) that abort kubelet startup with
+	// "unexpected end of JSON input"; worse, Asterinas ext2 returns ESTALE when
+	// unlinking such stale files, so an in-guest RemoveAll cannot clean them. A
+	// fresh fs sidesteps both. Best-effort wipe remains as defense in depth.
+	_ = os.RemoveAll(kubeletRoot)
 	if err := os.MkdirAll(kubeletRoot, 0o755); err != nil {
 		fmt.Printf("apiserver: FAILED mkdir %s: %v\n", kubeletRoot, err)
 		return

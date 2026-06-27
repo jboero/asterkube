@@ -132,6 +132,11 @@ func startContainerdDaemon(containerd, ctr string) {
 		"TMPDIR=/tmp",
 	}
 
+	// Install a CA trust bundle BEFORE launching containerd so it can verify TLS
+	// to image registries (the cluster's kube-proxy/kindnet DaemonSets pull from
+	// registry.k8s.io / docker.io).
+	installCABundle(filepath.Join(virtiofsMount, "ca-bundle.crt"))
+
 	// Install the CNI config + plugins BEFORE launching containerd so its CRI
 	// sees a network at init and reports NetworkReady — required for the node to
 	// reach Ready once it joins the apiserver (Layer 3a-2).
