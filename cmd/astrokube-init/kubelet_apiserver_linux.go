@@ -28,6 +28,11 @@ import (
 // CN=system:node:<nodeName> in the staged kubeconfig's client certificate.
 const nodeName = "astrokube"
 
+// serveWindow is how long the node stays up after registering, so the control
+// plane can mark it Ready and the scheduler can place a pod on it (and the host
+// can observe). The window ends early once a scheduled container starts.
+const serveWindow = 180 * time.Second
+
 // apiserverPhase runs the REAL kubelet connected to a real Kubernetes apiserver
 // (Layer 3a of the cluster-join path). Unlike the standalone phase, this kubelet
 // authenticates to the apiserver with a CA-signed node client certificate
@@ -136,11 +141,45 @@ func apiserverPhase(kubeletBin, sock, kubeconfig string, env []string) {
 		return
 	}
 	fmt.Printf("apiserver: PHASE 5 PASSED — the Asterinas node registered with the real apiserver as %q\n", nodeName)
-	fmt.Println("apiserver: (check `kubectl get nodes` on the host; the node will be NotReady until CNI is wired)")
-	// Hold the kubelet up a little longer so the node posts status/leases and is
-	// comfortably observable from the host before we power off.
-	time.Sleep(12 * time.Second)
-	dumpTail(kubeletLog, 30)
+	fmt.Println("apiserver: now serving as a live cluster node; the control plane can mark it Ready and schedule pods onto it.")
+
+	// Stay up as a live node so the control plane marks us Ready and the
+	// scheduler can place pods here, and so the host can observe via kubectl.
+	// Report node-readiness and any apiserver-scheduled pod lifecycle as it
+	// happens (deduplicated). Exit the window early once a scheduled pod has
+	// started a container.
+	serveDeadline := time.Now().Add(serveWindow)
+	reported := make(map[string]bool)
+	for time.Now().Before(serveDeadline) {
+		if k.ProcessState != nil && k.ProcessState.Exited() {
+			fmt.Println("apiserver: kubelet exited during the serve window")
+			break
+		}
+		for _, ln := range splitLines(readFileString(kubeletLog)) {
+			if firstMatch(ln, []string{
+				"status is now: NodeReady",
+				"source=\"api\"",
+				"Started container",
+				"Created container",
+				"RunPodSandbox",
+				"FailedMount",
+				"failed to",
+			}) == "" {
+				continue
+			}
+			if reported[ln] {
+				continue
+			}
+			reported[ln] = true
+			msg := ln
+			if i := strings.Index(msg, "] "); i > 0 && i+2 < len(msg) {
+				msg = msg[i+2:]
+			}
+			fmt.Printf("apiserver(kubelet)| %s\n", msg)
+		}
+		time.Sleep(5 * time.Second)
+	}
+	fmt.Println("apiserver: serve window complete; powering off (the node will go NotReady once this VM stops).")
 }
 
 // summarizeKubeletLog prints the parts of a (possibly large, goroutine-dump-

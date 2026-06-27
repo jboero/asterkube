@@ -32,6 +32,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	// Importing a kubelet package keeps this binary genuinely part of the
 	// kubelet module rather than a free-standing init, matching the goal of
@@ -40,6 +41,17 @@ import (
 )
 
 func main() {
+	// Multi-call applet: when invoked as `mount`/`umount` (via a PATH symlink),
+	// behave as that tool. The kubelet shells out to these to set up pod volumes
+	// and Asterinas ships no util-linux, so this one static binary stands in.
+	switch filepath.Base(os.Args[0]) {
+	case "mount":
+		runMount(os.Args[1:])
+		return
+	case "umount":
+		runUmount(os.Args[1:])
+		return
+	}
 	// A pod's container is this binary re-exec'd inside fresh namespaces; with
 	// CLONE_NEWPID it sees getpid()==1, so this guard must come first to keep it
 	// from recursing into the init logic.
@@ -106,6 +118,11 @@ func runAsInit() {
 
 	results := mountAll(defaultMounts())
 	report(results)
+
+	// Provide `mount`/`umount` (this binary, multi-call) on PATH before any
+	// component that shells out to them — the kubelet's volume manager does, to
+	// set up pod volumes like the projected ServiceAccount-token tmpfs.
+	installMountApplet()
 
 	probeKernel()
 
