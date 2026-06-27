@@ -106,33 +106,64 @@ func kubeletPhase(kubeletBin, crictlBin, sock string, env []string) {
 	fmt.Println("kubelet: started in standalone mode; waiting for the static pod via CRI...")
 
 	criBase := []string{"--runtime-endpoint", "unix://" + sock}
-	deadline := time.Now().Add(45 * time.Second)
-	found := false
+	crictlRun := func(args ...string) string {
+		out, _ := runWithTimeoutEnv(10*time.Second, env, crictlBin,
+			append(append([]string{}, criBase...), args...)...)
+		return out
+	}
+
+	deadline := time.Now().Add(75 * time.Second)
+	sandboxSeen := false
 	for time.Now().Before(deadline) {
 		if k.ProcessState != nil && k.ProcessState.Exited() {
 			fmt.Println("kubelet: process exited early")
 			break
 		}
-		out, _ := runWithTimeoutEnv(10*time.Second, env, crictlBin,
-			append(append([]string{}, criBase...), "pods", "--name", "hello")...)
-		if strings.Contains(out, "hello") {
-			found = true
-			for _, line := range splitLines(out) {
-				if line != "" {
-					fmt.Printf("kubelet(crictl pods)| %s\n", line)
+		pods := crictlRun("pods", "--name", "hello")
+		if strings.Contains(pods, "hello") {
+			if !sandboxSeen {
+				sandboxSeen = true
+				for _, line := range splitLines(pods) {
+					if line != "" {
+						fmt.Printf("kubelet(crictl pods)| %s\n", line)
+					}
+				}
+				fmt.Println("kubelet: sandbox observed; waiting for the hello container to be created and run...")
+			}
+			// The kubelet creates the container in the sandbox a few seconds
+			// later. Once it exists, capture its state and logs as end-to-end
+			// proof the real kubelet ran our workload through the CRI.
+			cid := lastNonEmptyLine(crictlRun("ps", "-a", "--name", "hello", "-q"))
+			if cid != "" {
+				for _, line := range splitLines(crictlRun("ps", "-a", "--name", "hello")) {
+					if strings.Contains(line, "hello") || strings.Contains(line, "CONTAINER") {
+						fmt.Printf("kubelet(crictl ps)| %s\n", line)
+					}
+				}
+				gotLogs := false
+				for _, line := range splitLines(crictlRun("logs", cid)) {
+					if strings.TrimSpace(line) != "" {
+						fmt.Printf("kubelet(container)| %s\n", line)
+						gotLogs = true
+					}
+				}
+				if gotLogs {
+					fmt.Println("kubelet: PHASE 4 PASSED — the real kubelet ran a container via the CRI")
+					return
 				}
 			}
-			break
 		}
 		time.Sleep(3 * time.Second)
 	}
 
-	if !found {
-		fmt.Println("kubelet: static pod NOT observed via CRI within 45s; kubelet log tail:")
-		dumpTail(kubeletLog, 80)
+	if sandboxSeen {
+		fmt.Println("kubelet: PHASE 4 PASSED — the real kubelet created a static pod sandbox via the CRI")
+		fmt.Println("kubelet: (container logs not captured before timeout) kubelet log tail:")
+		dumpTail(kubeletLog, 40)
 		return
 	}
-	fmt.Println("kubelet: PHASE 4 PASSED — the real kubelet created a static pod via the CRI")
+	fmt.Println("kubelet: static pod NOT observed via CRI within 75s; kubelet log tail:")
+	dumpTail(kubeletLog, 80)
 }
 
 // staticPodManifest is a host-network static pod that runs the side-loaded hello
