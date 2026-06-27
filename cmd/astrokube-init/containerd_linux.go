@@ -131,6 +131,12 @@ func startContainerdDaemon(containerd, ctr string) {
 		"XDG_RUNTIME_DIR=/run",
 		"TMPDIR=/tmp",
 	}
+
+	// Install the CNI config + plugins BEFORE launching containerd so its CRI
+	// sees a network at init and reports NetworkReady — required for the node to
+	// reach Ready once it joins the apiserver (Layer 3a-2).
+	setupCNI(filepath.Join(virtiofsMount, "cni"))
+
 	daemon := exec.Command(containerd,
 		"--root", root, "--state", state, "--address", sock, "--log-level", "debug")
 	daemon.Env = env
