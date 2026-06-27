@@ -84,7 +84,9 @@ func containerdPhase2() {
 		fmt.Printf("containerd: SKIPPED daemon (no containerd on the share: %v)\n", err)
 		return
 	}
-	out, err := runWithTimeout(10*time.Second, containerd, "--version")
+	// Generous timeout: the first exec cold-reads a ~40MB binary over virtio-fs
+	// and dynamically links it, which can be slow when the host is loaded.
+	out, err := runWithTimeout(40*time.Second, containerd, "--version")
 	for _, line := range splitLines(out) {
 		if line != "" {
 			fmt.Printf("containerd| %s\n", line)
@@ -164,7 +166,7 @@ func startContainerdDaemon(containerd, ctr string) {
 	fmt.Printf("containerd: daemon up, socket %s present\n", sock)
 
 	// Talk to the daemon: `ctr version` exercises the client→daemon API path.
-	out, err := runWithTimeoutEnv(15*time.Second, env, ctr, "--address", sock, "version")
+	out, err := runWithTimeoutEnv(40*time.Second, env, ctr, "--address", sock, "version")
 	for _, line := range splitLines(out) {
 		if line != "" {
 			fmt.Printf("ctr| %s\n", line)
@@ -190,7 +192,12 @@ func startContainerdDaemon(containerd, ctr string) {
 	criPhase(ctr, crictl, sock, env, logPath)
 
 	// Step 6: run the REAL kubelet in standalone mode against this CRI (Layer 2).
-	kubeletPhase(filepath.Join(virtiofsMount, "kubelet"), crictl, sock, env)
+	kubelet := filepath.Join(virtiofsMount, "kubelet")
+	kubeletPhase(kubelet, crictl, sock, env)
+
+	// Step 7: run the REAL kubelet connected to a real apiserver and register a
+	// node (Layer 3a). Enabled only when a kubeconfig is staged on the share.
+	apiserverPhase(kubelet, sock, filepath.Join(virtiofsMount, "kubeconfig"), env)
 }
 
 const (

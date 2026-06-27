@@ -87,7 +87,7 @@ func kubeletPhase(kubeletBin, crictlBin, sock string, env []string) {
 		"--runtime-cgroups=/",
 		"--kubelet-cgroups=/",
 		"--fail-swap-on=false",
-		"--hostname-override=astrokube",
+		"--hostname-override=" + nodeName,
 		"--resolv-conf=/etc/resolv.conf",
 		"--v=2",
 	}
