@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -187,7 +188,39 @@ func apiserverPhase(kubeletBin, sock, kubeconfig string, env []string) {
 		}
 		time.Sleep(5 * time.Second)
 	}
+
+	// Dump the cluster system DaemonSets' container logs (kube-proxy, kindnet):
+	// they run on this node but their logs aren't reachable over slirp, and they
+	// reveal the next gaps (kube-proxy's nftables programming, kindnet's CNI).
+	crictlBin := filepath.Join(virtiofsMount, "crictl")
+	for _, name := range []string{"kube-proxy", "kindnet-cni"} {
+		dumpContainerLogs(crictlBin, sock, env, name, 25)
+	}
+
 	fmt.Println("apiserver: serve window complete; powering off (the node will go NotReady once this VM stops).")
+}
+
+// dumpContainerLogs prints the last `tail` log lines of a running container
+// (matched by CRI container name) via crictl, for components whose logs are not
+// otherwise reachable from the host.
+func dumpContainerLogs(crictlBin, sock string, env []string, name string, tail int) {
+	base := []string{"--runtime-endpoint", "unix://" + sock}
+	idOut, _ := runWithTimeoutEnv(10*time.Second, env, crictlBin,
+		append(append([]string{}, base...), "ps", "-a", "--name", name, "--latest", "-q")...)
+	id := lastNonEmptyLine(idOut)
+	if id == "" {
+		fmt.Printf("apiserver: no %s container found to log\n", name)
+		return
+	}
+	logOut, _ := runWithTimeoutEnv(10*time.Second, env, crictlBin,
+		append(append([]string{}, base...), "logs", "--tail", fmt.Sprintf("%d", tail), id)...)
+	fmt.Printf("apiserver: --- %s logs (last %d) ---\n", name, tail)
+	for _, ln := range splitLines(logOut) {
+		if strings.TrimSpace(ln) != "" {
+			fmt.Printf("apiserver[%s]| %s\n", name, ln)
+		}
+	}
+	fmt.Printf("apiserver: --- end %s logs ---\n", name)
 }
 
 // summarizeKubeletLog prints the parts of a (possibly large, goroutine-dump-
