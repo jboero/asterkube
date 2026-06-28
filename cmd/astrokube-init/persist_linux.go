@@ -91,6 +91,9 @@ func serveForever() {
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM, syscall.SIGPWR)
 	// Now that we're ready to catch it, arm the kernel ACPI power-button monitor.
 	armACPIShutdown()
+	// Prove node-originated ClusterIP traffic is DNAT'd out eth0 (in the
+	// background so the node stays immediately responsive to shutdown signals).
+	go probeNodeClusterIP()
 	s := <-sigs
 	fmt.Printf("\nastrokube-init: received %v — shutting the node down gracefully.\n", s)
 	gracefulShutdown()
