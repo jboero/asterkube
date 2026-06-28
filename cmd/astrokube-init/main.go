@@ -140,8 +140,16 @@ func runAsInit() {
 	probeShebang()
 
 	// Exercise the container-runtime substrate (overlayfs snapshot, runc,
-	// containerd) before the network pod tests.
-	runContainerRuntimeTests()
+	// containerd) before the network pod tests — unless this is a zero-C image
+	// with no libc, in which case the dynamically-linked upstream runc/containerd
+	// cannot run; the pure-Go node agent below carries the container workload.
+	if pureGoMode() {
+		fmt.Println("astrokube-init: pure-Go image (no libc present) — skipping the")
+		fmt.Println("astrokube-init: glibc-linked containerd/runc phases; the pure-Go node")
+		fmt.Println("astrokube-init: agent runs containers with zero C below.")
+	} else {
+		runContainerRuntimeTests()
+	}
 
 	// Act as the node agent: run the static pods, exercising the kernel's
 	// namespace and cgroup support end-to-end.
