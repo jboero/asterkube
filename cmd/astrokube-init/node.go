@@ -84,6 +84,7 @@ type podNetwork struct {
 	// or "backend"; the backend advertises the VIP it serves and the port the
 	// kernel DNATs to.
 	ServiceVIP  string `json:"serviceVIP"`
+	ServicePort int    `json:"servicePort"`
 	BackendPort int    `json:"backendPort"`
 	ServiceRole string `json:"serviceRole"`
 	// CrossPingIP, if set, is the address of a pod on a *different* bridge/subnet
@@ -136,10 +137,59 @@ func runNodeAgent() {
 		}
 		runPod(spec)
 	}
+	// Append the kube-proxy Service-DNAT demo: pods that exercise a REAL cluster
+	// ClusterIP whose DNAT rule was translated from kube-proxy's nftables ruleset
+	// (no prctl rule is programmed for them). kube-proxy ran earlier in the boot,
+	// so its rules are already in the kernel NAT table.
+	bridged = append(bridged, buildKubeProxyDemoSpecs()...)
+
 	if len(bridged) > 0 {
 		runBridgedPods(bridged)
 	}
 	fmt.Println("astrokube-init: node agent: all pods completed")
+}
+
+// buildKubeProxyDemoSpecs builds the pods that demonstrate end-to-end Service
+// DNAT driven by KUBE-PROXY's translated rule (not a prctl rule). It mirrors the
+// kube-dns Service (ClusterIP 10.96.0.10:53, two endpoints at 10.244.0.2:53 and
+// 10.244.0.3:53), which kube-proxy programs into the kernel NAT table via its
+// nftables ruleset. We stand up local backends at exactly those endpoint IPs on
+// a 10.244.0.0/24 bridge and a client that dials the VIP: the bridge applies the
+// kube-proxy rule, DNATs to a backend, and load-balances across the set — proving
+// the whole nft -> nat_table() path moves real packets.
+func buildKubeProxyDemoSpecs() []podSpec {
+	const (
+		bridge = "kpbr"
+		gw     = "10.244.0.1"
+		vip    = "10.96.0.10"
+		vport  = 53
+		client = "10.244.0.4"
+	)
+	mk := func(name, ip, role, peer string) podSpec {
+		return podSpec{
+			Name:      name,
+			Hostname:  name,
+			Command:   []string{"/usr/bin/kubelet"},
+			Env:       []string{containerEnv + "=1"},
+			Resources: podResources{MemoryMaxMiB: 128, CPUMaxPercent: 50},
+			Network: &podNetwork{
+				Bridge:      bridge,
+				GatewayIP:   gw,
+				Prefix:      24,
+				PodIP:       ip,
+				PeerIP:      peer,
+				ServiceRole: role,
+				ServiceVIP:  vip,
+				ServicePort: vport,
+				BackendPort: vport,
+			},
+		}
+	}
+	return []podSpec{
+		mk("kpb1", "10.244.0.2", "kpbackend", client),
+		mk("kpb2", "10.244.0.3", "kpbackend", client),
+		mk("kpc", client, "kpclient", "10.244.0.2"),
+	}
 }
 
 // loadPodManifests reads and parses every *.json manifest in dir, sorted by name.
@@ -573,10 +623,20 @@ func runBridgedPod(spec podSpec, bridgeIdx int) {
 	// Pass the Service DNAT context so the container knows the VIP to dial (or
 	// the port to serve) and which role to play.
 	if spec.Network.ServiceRole != "" {
+		// Default to this build's fixed ClusterIP, but let a spec override the
+		// VIP/port — the kube-proxy demo dials a real cluster Service (10.96.0.10:53).
+		vip := serviceVIP
+		if spec.Network.ServiceVIP != "" {
+			vip = spec.Network.ServiceVIP
+		}
+		vport := serviceVPort
+		if spec.Network.ServicePort != 0 {
+			vport = spec.Network.ServicePort
+		}
 		netEnv = append(netEnv,
 			svcRoleEnv+"="+spec.Network.ServiceRole,
-			svcVIPEnv+"="+serviceVIP,
-			fmt.Sprintf("%s=%d", svcVPortEnv, serviceVPort),
+			svcVIPEnv+"="+vip,
+			fmt.Sprintf("%s=%d", svcVPortEnv, vport),
 			fmt.Sprintf("%s=%d", svcBackendPortEnv, spec.Network.BackendPort),
 		)
 	}

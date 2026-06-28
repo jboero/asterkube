@@ -109,9 +109,122 @@ func containerServiceTest(podIP string) {
 	case "client":
 		serviceClient()
 		serviceClientTCP()
+	case "kpbackend":
+		kpBackend(podIP)
+	case "kpclient":
+		kpClient()
 	default:
 		fmt.Printf("svc: unknown role %q (FAILED)\n", role)
 	}
+}
+
+// kpBackend impersonates a real cluster Service endpoint: it listens on the pod's
+// endpoint IP:port (the address kube-proxy DNATs to) and replies with its own
+// address so the client can tell endpoints apart for the load-balancing check.
+// That a connection arrives at all means the client's SYN to the ClusterIP was
+// DNAT'd here by kube-proxy's translated rule.
+func kpBackend(podIP string) {
+	port := backendListenPort()
+	ln, err := net.ListenTCP("tcp", &net.TCPAddr{IP: net.ParseIP(podIP), Port: port})
+	if err != nil {
+		fmt.Printf("kp-backend %s:%d: FAILED to listen: %v\n", podIP, port, err)
+		return
+	}
+	defer ln.Close()
+
+	served := 0
+	_ = ln.SetDeadline(time.Now().Add(12 * time.Second))
+	for {
+		conn, aerr := ln.Accept()
+		if aerr != nil {
+			break // deadline: the client has stopped connecting.
+		}
+		_ = conn.SetDeadline(time.Now().Add(3 * time.Second))
+		buf := make([]byte, 64)
+		_, _ = conn.Read(buf)
+		_, _ = conn.Write([]byte("kp-backend=" + podIP))
+		conn.Close()
+		served++
+	}
+	fmt.Printf("kp-backend %s:%d served %d request(s) DNAT'd from the ClusterIP\n", podIP, port, served)
+}
+
+// kpClient dials a REAL cluster ClusterIP (e.g. kube-dns 10.96.0.10:53) several
+// times over fresh connections. No prctl rule was programmed for this VIP — the
+// only thing that can route these packets to a backend is the rule the kernel
+// translated from kube-proxy's nftables ruleset. Each reply's payload names the
+// backend that served it, so distinct names across the batch prove the kernel
+// load-balanced the VIP across kube-proxy's endpoint set, exactly like a real node.
+func kpClient() {
+	vip := os.Getenv(svcVIPEnv)
+	vport := 53
+	if p, err := strconv.Atoi(os.Getenv(svcVPortEnv)); err == nil && p > 0 {
+		vport = p
+	}
+	vipIP := net.ParseIP(vip)
+	if vipIP == nil {
+		fmt.Printf("kp-client: FAILED bad VIP %q\n", vip)
+		return
+	}
+	target := &net.TCPAddr{IP: vipIP, Port: vport}
+
+	const sends = 10
+	ok := 0
+	backends := map[string]int{}
+	var lastErr string
+	for i := 0; i < sends; i++ {
+		// The first connection may race the backends still binding; retry it.
+		tries := 1
+		if i == 0 {
+			tries = 6
+		}
+		for t := 0; t < tries; t++ {
+			id, err := kpClientOnce(target)
+			if err == nil {
+				ok++
+				backends[id]++
+				break
+			}
+			lastErr = err.Error()
+			if t < tries-1 {
+				time.Sleep(1 * time.Second)
+			}
+		}
+	}
+
+	for id, n := range backends {
+		fmt.Printf("kp-client:   %s answered %d\n", id, n)
+	}
+	switch {
+	case ok > 0 && len(backends) >= 2:
+		fmt.Printf("kp-lb: OK — ClusterIP %s:%d DNAT'd to %d backends (load-balanced) via kube-proxy's translated nft rule\n",
+			vip, vport, len(backends))
+	case ok > 0:
+		fmt.Printf("kp-client: OK — ClusterIP %s:%d DNAT'd to a backend via kube-proxy's translated rule (%d/%d replies, %d backend)\n",
+			vip, vport, ok, sends, len(backends))
+	default:
+		fmt.Printf("kp-client: FAILED — no replies via ClusterIP %s:%d (last err: %s)\n", vip, vport, lastErr)
+	}
+}
+
+// kpClientOnce makes one connection to the VIP and returns the backend identity
+// from the reply payload.
+func kpClientOnce(target *net.TCPAddr) (string, error) {
+	conn, err := net.DialTCP("tcp", nil, target)
+	if err != nil {
+		return "", fmt.Errorf("dial: %w", err)
+	}
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(3 * time.Second))
+	if _, werr := conn.Write([]byte("kp-hello")); werr != nil {
+		return "", fmt.Errorf("write: %w", werr)
+	}
+	buf := make([]byte, 64)
+	n, rerr := conn.Read(buf)
+	if rerr != nil {
+		return "", fmt.Errorf("read: %w", rerr)
+	}
+	return string(buf[:n]), nil
 }
 
 // udpEndpointPorts returns the two UDP backend endpoints this pod serves:
