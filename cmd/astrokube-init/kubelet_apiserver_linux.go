@@ -32,7 +32,11 @@ const nodeName = "astrokube"
 // serveWindow is how long the node stays up after registering, so the control
 // plane can mark it Ready and the scheduler can place a pod on it (and the host
 // can observe). The window ends early once a scheduled container starts.
-const serveWindow = 240 * time.Second
+// serveWindow is how long phase 5 actively waits/observes after registration —
+// long enough for kube-proxy to sync and program the NAT table (which the
+// node-agent DNAT demo then uses). The node stays up indefinitely afterwards
+// (serveForever), so this no longer needs to be long.
+const serveWindow = 90 * time.Second
 
 // apiserverPhase runs the REAL kubelet connected to a real Kubernetes apiserver
 // (Layer 3a of the cluster-join path). Unlike the standalone phase, this kubelet
@@ -119,10 +123,6 @@ func apiserverPhase(kubeletBin, sock, kubeconfig string, env []string) {
 		fmt.Printf("apiserver: FAILED to start kubelet: %v\n", err)
 		return
 	}
-	defer func() {
-		_ = k.Process.Kill()
-		_, _ = k.Process.Wait()
-	}()
 	fmt.Printf("apiserver: kubelet started; connecting to the apiserver and registering node %q...\n", nodeName)
 
 	// Watch the kubelet log for the registration signal (or an early fatal).
@@ -153,6 +153,7 @@ func apiserverPhase(kubeletBin, sock, kubeconfig string, env []string) {
 	if !registered {
 		fmt.Println("apiserver: node NOT registered within 75s; kubelet log summary:")
 		summarizeKubeletLog(kubeletLog)
+		_ = k.Process.Kill()
 		return
 	}
 	fmt.Printf("apiserver: PHASE 5 PASSED — the Asterinas node registered with the real apiserver as %q\n", nodeName)
@@ -203,7 +204,10 @@ func apiserverPhase(kubeletBin, sock, kubeconfig string, env []string) {
 		dumpContainerLogs(crictlBin, sock, env, name, 25)
 	}
 
-	fmt.Println("apiserver: serve window complete; powering off (the node will go NotReady once this VM stops).")
+	// Keep the kubelet running: the node stays registered and Ready as a live,
+	// persistent cluster member (the init blocks in serveForever afterwards).
+	keepAlive(k)
+	fmt.Println("apiserver: node is registered and Ready; keeping the kubelet running (persistent node).")
 }
 
 // dumpContainerLogs prints the last `tail` log lines of a running container

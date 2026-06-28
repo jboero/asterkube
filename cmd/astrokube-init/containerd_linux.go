@@ -55,7 +55,10 @@ func containerdPhase2() {
 		fmt.Printf("containerd: SKIPPED (no virtio-fs share %q: %v)\n", virtiofsTag, err)
 		return
 	}
-	defer syscall.Unmount(virtiofsMount, 0)
+	// Keep the share mounted: containerd persists for the live node and reads its
+	// shim/runtime binaries from here, so unmounting on return would make every
+	// later pod sandbox fail with "fork/exec /mnt/vfs/...: no such file or
+	// directory". gracefulShutdown tears the node down on ACPI poweroff.
 	fmt.Printf("containerd: mounted virtio-fs tag=%q at %s\n", virtiofsTag, virtiofsMount)
 
 	// Prove the mount is readable: list it and read the marker the host wrote.
@@ -151,10 +154,9 @@ func startContainerdDaemon(containerd, ctr string) {
 		fmt.Printf("containerd: FAILED to start daemon: %v\n", err)
 		return
 	}
-	defer func() {
-		_ = daemon.Process.Kill()
-		_, _ = daemon.Process.Wait()
-	}()
+	// Keep containerd running for the persistent node (the apiserver kubelet
+	// needs it). It is stopped by gracefulShutdown on ACPI poweroff.
+	keepAlive(daemon)
 
 	// Wait for the control socket to appear (daemon ready).
 	ready := false

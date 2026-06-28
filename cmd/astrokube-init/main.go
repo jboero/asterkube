@@ -151,9 +151,16 @@ func runAsInit() {
 	// to reach a kube-apiserver?
 	probeOutboundTCP()
 
+	// If the node came up live (containerd + the apiserver kubelet are running),
+	// keep it running as a persistent, interactive cluster member until an ACPI
+	// shutdown arrives. Otherwise the capability demos are done — power off.
 	fmt.Println()
-	fmt.Println("astrokube-init: node work complete. Powering off.")
-	powerOff()
+	if nodeIsLive() {
+		serveForever()
+	} else {
+		fmt.Println("astrokube-init: node did not come up live; powering off.")
+		powerOff()
+	}
 }
 
 func banner() {
