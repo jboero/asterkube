@@ -126,6 +126,9 @@ func runAsInit() {
 
 	probeKernel()
 
+	// Exercise the new NETLINK_NETFILTER kernel surface (what nft/iptables use).
+	probeNetfilter()
+
 	// Exercise the container-runtime substrate (overlayfs snapshot, runc,
 	// containerd) before the network pod tests.
 	runContainerRuntimeTests()
