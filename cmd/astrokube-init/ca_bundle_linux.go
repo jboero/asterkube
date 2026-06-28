@@ -20,7 +20,33 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
+
+// installClusterHosts appends staged "<ip> <hostname>" cluster mappings to the
+// node's /etc/hosts. Because hostNetwork pods (e.g. kube-proxy) get their
+// /etc/hosts built from the node's, this lets them resolve the apiserver's
+// in-cluster hostname, which the guest's slirp DNS cannot.
+func installClusterHosts(src string) {
+	extra, err := os.ReadFile(src)
+	if err != nil || len(extra) == 0 {
+		return
+	}
+	hosts, _ := os.ReadFile("/etc/hosts")
+	if strings.Contains(string(hosts), strings.TrimSpace(string(extra))) {
+		return // already present
+	}
+	merged := append(hosts, extra...)
+	if err := os.WriteFile("/etc/hosts", merged, 0o644); err != nil {
+		fmt.Printf("apiserver: WARN appending cluster hosts: %v\n", err)
+		return
+	}
+	for _, ln := range strings.Split(strings.TrimSpace(string(extra)), "\n") {
+		if strings.TrimSpace(ln) != "" {
+			fmt.Printf("apiserver: /etc/hosts += %q\n", strings.TrimSpace(ln))
+		}
+	}
+}
 
 // installCABundle places a system CA trust bundle (staged from the host on the
 // virtio-fs share) at the paths Go's crypto/x509 consults on Linux. Without it,

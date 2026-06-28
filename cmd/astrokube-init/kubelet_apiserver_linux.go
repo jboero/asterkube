@@ -57,6 +57,12 @@ func apiserverPhase(kubeletBin, sock, kubeconfig string, env []string) {
 		return
 	}
 
+	// Let in-cluster clients resolve the apiserver's cluster hostname. kube-proxy
+	// runs as a hostNetwork pod, so the kubelet builds its /etc/hosts from the
+	// node's; the guest's slirp DNS can't resolve e.g. upbound-cluster-control-
+	// plane, so kube-proxy is stuck on "no such host" without this mapping.
+	installClusterHosts(filepath.Join(virtiofsMount, "hosts-extra"))
+
 	const kubeletRoot = "/ext2/kubelet-apiserver"
 	// The kubelet root-dir lives on the ext2 disk, which the host reformats fresh
 	// each boot (astrokube/fresh-ext2.sh) because this node is ephemeral. A
