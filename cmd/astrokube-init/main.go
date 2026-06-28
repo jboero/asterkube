@@ -51,6 +51,11 @@ func main() {
 	case "umount":
 		runUmount(os.Args[1:])
 		return
+	case "shebang-probe":
+		// Used by probeShebang: print our argv so the caller can verify the
+		// kernel passed the script's path (argv[1]) to the interpreter.
+		fmt.Printf("shebang-probe argv: %v\n", os.Args)
+		return
 	}
 	// A pod's container is this binary re-exec'd inside fresh namespaces; with
 	// CLONE_NEWPID it sees getpid()==1, so this guard must come first to keep it
@@ -128,6 +133,11 @@ func runAsInit() {
 
 	// Exercise the new NETLINK_NETFILTER kernel surface (what nft/iptables use).
 	probeNetfilter()
+
+	// Verify the shebang interpreter-path fix (what kube-proxy's iptables-wrapper
+	// needs): exec a #! script with a short argv[0] and confirm the interpreter
+	// receives the script's path, not the bare argv[0].
+	probeShebang()
 
 	// Exercise the container-runtime substrate (overlayfs snapshot, runc,
 	// containerd) before the network pod tests.
