@@ -25,6 +25,25 @@ import (
 	"time"
 )
 
+// prAstrokubeAcpi is the prctl option that arms the kernel's ACPI power-button
+// monitor: an orderly host poweroff (QEMU `system_powerdown` / virsh shutdown)
+// is then delivered to this process (PID 1) as SIGINT for a graceful node drain.
+const prAstrokubeAcpi = 0x4b554143 // "KUAC"
+
+// armACPIShutdown asks the kernel to start watching for an ACPI power-button
+// event and convert it into a SIGINT to PID 1. Best-effort: on a kernel without
+// the extension (or no PM1a event block), the prctl simply errors and the node
+// still shuts down on a direct SIGTERM/SIGINT.
+func armACPIShutdown() {
+	if _, _, errno := syscall.Syscall6(prSysPrctl, prAstrokubeAcpi, 0, 0, 0, 0, 0); errno != 0 {
+		fmt.Printf("astrokube-init: ACPI power-button monitor unavailable (%v); "+
+			"relying on direct termination signals.\n", errno)
+		return
+	}
+	fmt.Println("astrokube-init: ACPI power-button monitor armed (orderly host " +
+		"poweroff drains the node gracefully).")
+}
+
 // liveProcs are the long-running node processes (containerd and the
 // apiserver-connected kubelet) that a *persistent* node keeps running after the
 // boot-time capability demos. gracefulShutdown stops them on the way down.
@@ -70,6 +89,8 @@ func serveForever() {
 	// harmless; a namespace-scoped reaper that excludes the runtimes is future work.
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM, syscall.SIGPWR)
+	// Now that we're ready to catch it, arm the kernel ACPI power-button monitor.
+	armACPIShutdown()
 	s := <-sigs
 	fmt.Printf("\nastrokube-init: received %v — shutting the node down gracefully.\n", s)
 	gracefulShutdown()
