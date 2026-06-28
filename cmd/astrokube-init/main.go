@@ -41,10 +41,20 @@ import (
 )
 
 func main() {
+	// The pure-Go OCI runtime re-execs this binary as the container init inside
+	// the new namespaces; this must come before everything else.
+	if len(os.Args) >= 5 && os.Args[1] == "__runc_init" {
+		os.Exit(runcInit(os.Args[2], os.Args[3], os.Args[4]))
+	}
+
 	// Multi-call applet: when invoked as `mount`/`umount` (via a PATH symlink),
 	// behave as that tool. The kubelet shells out to these to set up pod volumes
 	// and Asterinas ships no util-linux, so this one static binary stands in.
+	// Invoked as `runc`/`astrokube-runc`, it is the pure-Go, CGO-free OCI runtime
+	// that containerd's shim drives — so the node runs containers with zero C.
 	switch filepath.Base(os.Args[0]) {
+	case "runc", "astrokube-runc":
+		os.Exit(runOCIRuntime(os.Args[1:]))
 	case "mount":
 		runMount(os.Args[1:])
 		return
@@ -147,6 +157,8 @@ func runAsInit() {
 		fmt.Println("astrokube-init: pure-Go image (no libc present) — skipping the")
 		fmt.Println("astrokube-init: glibc-linked containerd/runc phases; the pure-Go node")
 		fmt.Println("astrokube-init: agent runs containers with zero C below.")
+		// Prove the pure-Go OCI runtime (our CGO-free runc replacement) works.
+		ociSelfTest()
 	} else {
 		runContainerRuntimeTests()
 	}
