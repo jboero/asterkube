@@ -157,8 +157,10 @@ func runAsInit() {
 		fmt.Println("astrokube-init: pure-Go image (no libc present) — skipping the")
 		fmt.Println("astrokube-init: glibc-linked containerd/runc phases; the pure-Go node")
 		fmt.Println("astrokube-init: agent runs containers with zero C below.")
-		// Prove the pure-Go OCI runtime (our CGO-free runc replacement) works.
+		// Prove the pure-Go OCI runtime (our CGO-free runc replacement) works...
 		ociSelfTest()
+		// ...then prove static containerd drives it end to end, zero C.
+		zeroCContainerdTest()
 	} else {
 		runContainerRuntimeTests()
 	}

@@ -133,9 +133,12 @@ func runOCIRuntime(args []string) int {
 			g.log = args[i]
 		case strings.HasPrefix(a, "--log="):
 			g.log = strings.TrimPrefix(a, "--log=")
-		case a == "--log-format", a == "--systemd-cgroup", a == "--debug", a == "--rootless":
-			// boolean/handled flags we accept and ignore
-		case a == "--log-format=text", a == "--log-format=json":
+		case a == "--log-format":
+			i++ // takes a value ("text"/"json") as a separate arg — consume it
+		case strings.HasPrefix(a, "--log-format="):
+			// value attached; nothing to consume
+		case a == "--systemd-cgroup", a == "--debug", a == "--rootless":
+			// boolean flags we accept and ignore
 		case strings.HasPrefix(a, "--"):
 			// unknown global flag, possibly with a value; skip a trailing value
 			if !strings.Contains(a, "=") && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") && isGlobalValueFlag(a) {
@@ -173,6 +176,25 @@ dispatch:
 		err = cmdKill(g, rest)
 	case "delete":
 		err = cmdDelete(g, rest)
+	case "ps":
+		// Best-effort: report the container's init pid so the shim's monitoring
+		// has something to read.
+		id := lastArg(rest)
+		if st, e := readState(g, id); e == nil {
+			if containsArg(rest, "--format") && containsArg(rest, "json") {
+				fmt.Printf("[%d]\n", st.InitPid)
+			} else {
+				fmt.Printf("PID\n%d\n", st.InitPid)
+			}
+		}
+		return 0
+	case "update", "pause", "resume":
+		// Accept cgroup updates / pause / resume as no-ops; the container keeps
+		// running under the limits applied at create.
+		return 0
+	case "events":
+		// No streaming stats; succeed quietly.
+		return 0
 	default:
 		runcLog(g, "unsupported runc command %q", cmd)
 		return 1
@@ -663,6 +685,15 @@ func applyCgroup(spec *ociSpec, id string, pid int) string {
 
 func pidAlive(pid int) bool {
 	return syscall.Kill(pid, 0) == nil
+}
+
+func containsArg(args []string, want string) bool {
+	for _, a := range args {
+		if a == want {
+			return true
+		}
+	}
+	return false
 }
 
 func lastArg(args []string) string {
