@@ -120,6 +120,15 @@ func main() {
 		rootlessProbeUserns()
 		return
 	}
+	// rootless id-mapping probe roles.
+	switch os.Getenv(usermapProbeEnv) {
+	case "unpriv":
+		usermapProbeUnpriv()
+		return
+	case "child":
+		usermapProbeChild()
+		return
+	}
 	// A pod's container is this binary re-exec'd inside fresh namespaces; with
 	// CLONE_NEWPID it sees getpid()==1, so this guard must come first to keep it
 	// from recursing into the init logic.
@@ -230,6 +239,9 @@ func runAsInit() {
 	// Rootless: an unprivileged process gains capabilities inside its own user
 	// namespace but stays powerless on the host (the privesc boundary).
 	runRootlessProbe()
+	// Rootless id mapping: an unprivileged process maps its uid/gid so the
+	// container sees itself as root 0 (functional rootless).
+	runUsermapProbe()
 
 	// Act as the node agent: run the static pods, exercising the kernel's
 	// namespace and cgroup support end-to-end.
