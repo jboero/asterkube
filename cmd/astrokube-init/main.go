@@ -33,12 +33,16 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-
-	// Importing a kubelet package keeps this binary genuinely part of the
-	// kubelet module rather than a free-standing init, matching the goal of
-	// making init an extension of the kubelet.
-	kubelettypes "k8s.io/kubelet/pkg/types"
 )
+
+// runAsKubelet runs the ordinary kubelet path (not PID 1, not an applet). It is
+// supplied by one of two build-time variants so the SAME main() works for both:
+//   - kubelet_entry_stub.go: the lightweight standalone build in this module
+//     (k8s.io/kubelet) — a placeholder, since this module cannot import the full
+//     kubelet command.
+//   - kubelet_entry_real.go: the combined zero-C build from the kubernetes tree
+//     (cmd/astrokube-kubelet) — runs the REAL upstream kubelet, CGO-free.
+// The file that defines it is selected by which tree the binary is built in.
 
 func main() {
 	// The pure-Go OCI runtime re-execs this binary as the container init inside
@@ -116,13 +120,6 @@ func main() {
 		return
 	}
 	runAsInit()
-}
-
-// runAsKubelet is the placeholder for the ordinary kubelet path taken when this
-// process is not PID 1. The real implementation will exec/serve the kubelet.
-func runAsKubelet() {
-	fmt.Println("astrokube-init: not running as PID 1; deferring to the normal kubelet entry point.")
-	fmt.Printf("astrokube-init: (kubelet pod-name label key is %q)\n", kubelettypes.KubernetesPodNameLabel)
 }
 
 // runAsInit performs the PID 1 responsibilities. For this milestone that means
