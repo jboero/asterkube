@@ -61,11 +61,16 @@ func zeroCContainerdTest() {
 	fmt.Println("astrokube-init: containerd on share is statically linked (zero C) ✓")
 
 	// Provide our pure-Go OCI runtime as `runc` on PATH, so the shim drives it.
+	// It is this very binary (multi-call: invoked as `runc` it is the runtime).
+	self, eerr := os.Executable()
+	if eerr != nil || self == "" {
+		self = "/usr/bin/kubelet"
+	}
 	_ = os.Remove("/usr/bin/runc")
-	if err := os.Symlink("/usr/bin/astrokube-init", "/usr/bin/runc"); err != nil {
+	if err := os.Symlink(self, "/usr/bin/runc"); err != nil {
 		fmt.Printf("astrokube-init: WARN could not link /usr/bin/runc: %v\n", err)
 	} else {
-		fmt.Println("astrokube-init: /usr/bin/runc -> pure-Go OCI runtime ✓")
+		fmt.Println("astrokube-init: /usr/bin/runc -> our binary (pure-Go OCI runtime) ✓")
 	}
 
 	root := "/run/containerd/root"
