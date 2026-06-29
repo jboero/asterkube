@@ -97,6 +97,15 @@ func main() {
 		fileMacProbePeer()
 		return
 	}
+	// astromac network MAC probe roles.
+	switch os.Getenv(socketMacProbeEnv) {
+	case "main":
+		socketMacProbeMain()
+		return
+	case "peer":
+		socketMacProbePeer()
+		return
+	}
 	// A pod's container is this binary re-exec'd inside fresh namespaces; with
 	// CLONE_NEWPID it sees getpid()==1, so this guard must come first to keep it
 	// from recursing into the init logic.
@@ -200,6 +209,8 @@ func runAsInit() {
 	runMacProbe()
 	// ...and that it covers cross-tenant FILE access on a shared filesystem.
 	runFileMacProbe()
+	// ...and cross-tenant network connects on a shared network.
+	runSocketMacProbe()
 
 	// Act as the node agent: run the static pods, exercising the kernel's
 	// namespace and cgroup support end-to-end.
