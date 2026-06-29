@@ -346,8 +346,10 @@ func cloneFlagsFor(spec *ociSpec) uintptr {
 	}
 	for _, ns := range spec.Linux.Namespaces {
 		if ns.Path != "" {
-			// Joining an existing namespace (setns) is out of scope; skip it so
-			// at least the create-fresh namespaces still apply.
+			// A namespace with a path is JOINED via setns in the container init
+			// (joinNamespaces), not created fresh here — this is the pod sandbox
+			// model, where workload containers share the pause container's
+			// net/ipc/uts namespaces.
 			continue
 		}
 		switch ns.Type {
@@ -375,10 +377,61 @@ func cloneFlagsFor(spec *ociSpec) uintptr {
 
 // ---- the container init (runs in the new namespaces, blocks until start) ----
 
+// sysSetns is the setns(2) syscall number on x86_64 (not in Go's stdlib syscall).
+const sysSetns = 308
+
+// joinNamespaces makes the container init join the existing namespaces named by
+// path in the OCI spec (the pod sandbox model: workload containers share the
+// pause container's net/ipc/uts namespaces). The kernel supports setns for
+// net/ipc/uts/cgroup; joining a PID namespace is not yet supported (so
+// shareProcessNamespace pods still get their own PID namespace), and the mount
+// namespace is always created fresh here for pivot_root.
+func joinNamespaces(spec *ociSpec) error {
+	if spec.Linux == nil {
+		return nil
+	}
+	for _, ns := range spec.Linux.Namespaces {
+		if ns.Path == "" {
+			continue // created fresh via Cloneflags
+		}
+		var nstype uintptr
+		switch ns.Type {
+		case "network":
+			nstype = syscall.CLONE_NEWNET
+		case "ipc":
+			nstype = syscall.CLONE_NEWIPC
+		case "uts":
+			nstype = syscall.CLONE_NEWUTS
+		case "cgroup":
+			nstype = syscall.CLONE_NEWCGROUP
+		default:
+			// pid: kernel has no setns(CLONE_NEWPID) yet; mount: created fresh.
+			continue
+		}
+		fd, err := syscall.Open(ns.Path, syscall.O_RDONLY|syscall.O_CLOEXEC, 0)
+		if err != nil {
+			return fmt.Errorf("open %s ns %q: %w", ns.Type, ns.Path, err)
+		}
+		_, _, errno := syscall.Syscall(sysSetns, uintptr(fd), nstype, 0)
+		syscall.Close(fd)
+		if errno != 0 {
+			return fmt.Errorf("setns %s: %v", ns.Type, errno)
+		}
+	}
+	return nil
+}
+
 func runcInit(root, id, bundle string) int {
 	spec, err := readSpec(bundle)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "astrokube-runc init: spec: %v\n", err)
+		return 1
+	}
+
+	// Join any sandbox namespaces named by path (pod networking/ipc/uts) before
+	// setting up the rootfs.
+	if err := joinNamespaces(spec); err != nil {
+		fmt.Fprintf(os.Stderr, "astrokube-runc init: join ns: %v\n", err)
 		return 1
 	}
 	rootfs := spec.Root.Path

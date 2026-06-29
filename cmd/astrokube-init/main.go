@@ -134,6 +134,15 @@ func main() {
 		fmt.Printf("euid=%d\n", os.Geteuid())
 		return
 	}
+	// pod-sandbox netns probe roles.
+	switch os.Getenv(sandboxProbeEnv) {
+	case "hold":
+		sandboxProbeHold()
+		return
+	case "join":
+		sandboxProbeJoin()
+		return
+	}
 	// A pod's container is this binary re-exec'd inside fresh namespaces; with
 	// CLONE_NEWPID it sees getpid()==1, so this guard must come first to keep it
 	// from recursing into the init logic.
@@ -250,6 +259,9 @@ func runAsInit() {
 	// Volume hardening: a setuid binary on a nosuid volume can't grant root,
 	// and a noexec volume can't run code (closes the rootless-volume escalation).
 	runVolumeProbe()
+	// Pod sandbox: a workload joins the sandbox's network namespace via setns
+	// (multi-container pods share localhost) — the runtime now uses this.
+	runSandboxNetnsProbe()
 
 	// Act as the node agent: run the static pods, exercising the kernel's
 	// namespace and cgroup support end-to-end.
