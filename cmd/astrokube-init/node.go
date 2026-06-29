@@ -53,6 +53,15 @@ const (
 // bridge, enabling the pod↔pod connectivity tests.
 const peerIPEnv = "ASTROKUBE_PEER_IP"
 
+// astromac multi-tenant adapter env vars. podTenantEnv tells a container which
+// astromac tenant to label itself with (the node agent translates a pod's spec
+// into this); tenantProbeIPEnv asks the container to attempt a cross-tenant TCP
+// connect to that address and report whether the kernel isolated it.
+const (
+	podTenantEnv     = "ASTROKUBE_POD_TENANT"
+	tenantProbeIPEnv = "ASTROKUBE_TENANT_PROBE_IP"
+)
+
 // crossPingEnv passes a bridged pod the address of a pod on a *different*
 // bridge/subnet to probe, exercising the kernel's inter-bridge L3 router.
 const crossPingEnv = "ASTROKUBE_CROSS_PING"
@@ -97,6 +106,10 @@ type podNetwork struct {
 	Uplink     bool   `json:"uplink"`
 	MasqRole   string `json:"masqRole"`
 	MasqTarget string `json:"masqTarget"`
+	// TenantProbeIP, if set, asks this (tenant-labeled) pod to attempt a TCP
+	// connect to that peer address — used to demonstrate astromac cross-tenant
+	// network isolation between real pods.
+	TenantProbeIP string `json:"tenantProbeIP"`
 }
 
 // bridged reports whether the pod asks to be attached to a bridge.
@@ -113,6 +126,12 @@ type podSpec struct {
 	Env       []string     `json:"env"`
 	Resources podResources `json:"resources"`
 	Network   *podNetwork  `json:"network,omitempty"`
+	// Tenant, if non-zero, is the astromac tenant the node agent assigns to this
+	// pod — the multi-tenant MAC label. 0 (the default) = unconfined, so an
+	// ordinary pod is unaffected. This is the adapter from "pod spec" to a
+	// kernel security label, the place a real launcher would map a namespace /
+	// seLinuxOptions / tenant annotation onto astromac.
+	Tenant uint32 `json:"tenant"`
 }
 
 // runNodeAgent is the kubelet-as-init's node loop: it reads static pod manifests
@@ -154,6 +173,11 @@ func runNodeAgent() {
 	} else {
 		bridged = append(bridged, buildKubeProxyDemoSpecs()...)
 	}
+
+	// Append the astromac multi-tenant demo: two real pods on a shared bridge
+	// with different tenants; the kernel MAC must isolate them. This exercises
+	// the adapter (pod spec -> kernel label) end to end on the real pod path.
+	bridged = append(bridged, buildTenantDemoSpecs()...)
 
 	if len(bridged) > 0 {
 		runBridgedPods(bridged)
@@ -314,6 +338,11 @@ func startPodContainer(spec podSpec, netEnv []string) *podHandle {
 
 	cmd := exec.Command(spec.Command[0], spec.Command[1:]...)
 	cmd.Env = append(append([]string{}, spec.Env...), podHostnameEnv+"="+spec.Hostname)
+	// Adapter: translate the pod's tenant from its spec into a label the
+	// container applies to itself (astromac multi-tenant MAC).
+	if spec.Tenant != 0 {
+		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%d", podTenantEnv, spec.Tenant))
+	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Cloneflags: syscall.CLONE_NEWPID | syscall.CLONE_NEWNS | syscall.CLONE_NEWUTS |
 			syscall.CLONE_NEWIPC | syscall.CLONE_NEWNET,
@@ -452,6 +481,10 @@ func runContainer() {
 		sync.Close()
 	}
 
+	// Adapter: if the node agent assigned this pod an astromac tenant, label
+	// ourselves before doing anything else, so all our operations are mediated.
+	containerSetTenant()
+
 	if hostname := os.Getenv(podHostnameEnv); hostname != "" {
 		if err := syscall.Sethostname([]byte(hostname)); err != nil {
 			fmt.Printf("sethostname failed: %v\n", err)
@@ -468,6 +501,11 @@ func runContainer() {
 		fmt.Printf("veth networking: %s\n", containerVethTest(podIP))
 	} else {
 		fmt.Printf("workload: %s\n", containerWorkload())
+	}
+	// Adapter demo: a tenant-labeled pod probes a peer pod to show the kernel
+	// isolates cross-tenant network access between real pods.
+	if target := os.Getenv(tenantProbeIPEnv); target != "" {
+		fmt.Printf("tenant-isolation: %s\n", tenantConnectProbe(target))
 	}
 	fmt.Println("container exiting cleanly")
 }
@@ -590,6 +628,11 @@ func runBridgedPods(specs []podSpec) {
 		break
 	}
 
+	// astromac adapter: before launching, label each tenant pod's IP with its
+	// tenant and switch the MAC to enforcing. Done up front (not per-pod) so a
+	// pod's cross-tenant connect can never race ahead of its peer's label.
+	applyTenantLabels(specs)
+
 	// Start every bridged pod concurrently; each goroutine carries the usual
 	// 15s-per-pod watchdog, so the whole group stays bounded.
 	var wg sync.WaitGroup
@@ -606,6 +649,9 @@ func runBridgedPods(specs []podSpec) {
 		}(spec, idx)
 	}
 	wg.Wait()
+
+	// Restore the permissive default and clear the demo's tenant labels.
+	cleanupTenantLabels(specs)
 }
 
 // runBridgedPod launches one bridged pod and wires its veth host half onto the
@@ -619,6 +665,9 @@ func runBridgedPod(spec podSpec, bridgeIdx int) {
 	}
 	if spec.Network.PeerIP != "" {
 		netEnv = append(netEnv, peerIPEnv+"="+spec.Network.PeerIP)
+	}
+	if spec.Network.TenantProbeIP != "" {
+		netEnv = append(netEnv, tenantProbeIPEnv+"="+spec.Network.TenantProbeIP)
 	}
 	if spec.Network.CrossPingIP != "" {
 		netEnv = append(netEnv, crossPingEnv+"="+spec.Network.CrossPingIP)
