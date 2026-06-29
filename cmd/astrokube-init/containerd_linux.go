@@ -196,7 +196,7 @@ func startContainerdDaemon(containerd, ctr string) {
 	// Step 4: import a side-loaded image and run it under containerd. This drives
 	// the full stack: content store (bbolt), overlay snapshotter, the
 	// runtime-v2 shim, and runc as the task.
-	ctrImportAndRun(ctr, sock, env, logPath)
+	ctrImportAndRun(ctr, sock, env, logPath, helloTar)
 
 	// Step 5: drive containerd through the CRI (Container Runtime Interface) the
 	// way a kubelet would — a pod sandbox plus a container — using crictl. This
@@ -219,10 +219,11 @@ const (
 	helloTar     = virtiofsMount + "/hello.tar"
 )
 
-// ctrImportAndRun imports the side-loaded OCI image and runs a container from it.
-func ctrImportAndRun(ctr, sock string, env []string, logPath string) {
-	if _, err := os.Stat(helloTar); err != nil {
-		fmt.Printf("containerd: SKIPPED `ctr run` (no image %s: %v)\n", helloTar, err)
+// ctrImportAndRun imports the side-loaded OCI image at tarPath and runs a
+// container from it.
+func ctrImportAndRun(ctr, sock string, env []string, logPath, tarPath string) {
+	if _, err := os.Stat(tarPath); err != nil {
+		fmt.Printf("containerd: SKIPPED `ctr run` (no image %s: %v)\n", tarPath, err)
 		return
 	}
 	base := []string{"--address", sock, "-n", ctrNamespace}
@@ -246,7 +247,7 @@ func ctrImportAndRun(ctr, sock string, env []string, logPath string) {
 
 	// `ctr images import` imports into the bbolt content store AND unpacks the
 	// layers into the snapshotter in one step.
-	if _, ok := runCtr(30*time.Second, "ctr images import", "images", "import", helloTar); !ok {
+	if _, ok := runCtr(30*time.Second, "ctr images import", "images", "import", tarPath); !ok {
 		return
 	}
 	fmt.Println("containerd: image imported + unpacked into the overlay snapshotter")

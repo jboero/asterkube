@@ -20,15 +20,24 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 )
 
-// zeroCContainerdTest brings up a STATIC (CGO-free) containerd from the share
-// and runs a container through it — with the container runtime being our own
-// pure-Go runc replacement. If it succeeds, the entire path
+// The zero-C container runtime is baked directly into the initramfs (it used to
+// be delivered over a virtio-fs share during development; the finished image is
+// self-contained, so the ISO/QCOW2 carries everything). containerd, ctr and the
+// runc v2 shim are static, CGO-free binaries on PATH in /usr/bin; the side-loaded
+// image is a tarball under /usr/share/astrokube.
+const (
+	zeroCContainerd = "/usr/bin/containerd"
+	zeroCCtr        = "/usr/bin/ctr"
+	zeroCImageTar   = "/usr/share/astrokube/hello.tar"
+)
+
+// zeroCContainerdTest brings up the STATIC (CGO-free) containerd baked into the
+// initramfs and runs a container through it — with the container runtime being
+// our own pure-Go runc replacement. If it succeeds, the entire path
 //
 //	containerd (static) -> containerd-shim-runc-v2 (static) -> runc (pure Go) -> container
 //
@@ -38,27 +47,18 @@ func zeroCContainerdTest() {
 	fmt.Println("astrokube-init: ===== zero-C containerd path =====")
 	fmt.Println("astrokube-init: static containerd + shim driving the pure-Go OCI runtime")
 
-	if err := os.MkdirAll(virtiofsMount, 0o755); err != nil {
-		fmt.Printf("astrokube-init: SKIPPED (mkdir %s: %v)\n", virtiofsMount, err)
-		return
-	}
-	if err := syscall.Mount(virtiofsTag, virtiofsMount, "virtiofs", 0, ""); err != nil {
-		// Possibly already mounted; only bail if the binary is missing below.
-		fmt.Printf("astrokube-init: note: virtio-fs mount: %v\n", err)
-	}
-
-	containerd := filepath.Join(virtiofsMount, "containerd")
-	ctr := filepath.Join(virtiofsMount, "ctr")
+	containerd := zeroCContainerd
+	ctr := zeroCCtr
 	if _, err := os.Stat(containerd); err != nil {
-		fmt.Printf("astrokube-init: SKIPPED (no static containerd on share: %v)\n", err)
+		fmt.Printf("astrokube-init: SKIPPED (no static containerd in image: %v)\n", err)
 		return
 	}
-	// Confirm the delivered containerd is genuinely C-free (static, no interp).
+	// Confirm the baked-in containerd is genuinely C-free (static, no interp).
 	if dynamic, _ := isDynamicELF(containerd); dynamic {
-		fmt.Println("astrokube-init: SKIPPED (share containerd is dynamically linked, not the zero-C build)")
+		fmt.Println("astrokube-init: SKIPPED (containerd is dynamically linked, not the zero-C build)")
 		return
 	}
-	fmt.Println("astrokube-init: containerd on share is statically linked (zero C) ✓")
+	fmt.Println("astrokube-init: containerd in image is statically linked (zero C) ✓")
 
 	// Provide our pure-Go OCI runtime as `runc` on PATH, so the shim drives it.
 	// It is this very binary (multi-call: invoked as `runc` it is the runtime).
@@ -79,10 +79,10 @@ func zeroCContainerdTest() {
 	logPath := "/run/containerd/containerd.log"
 	_ = os.MkdirAll(root, 0o755)
 	_ = os.MkdirAll(state, 0o755)
-	// PATH reaches the shim + ctr (share) and runc (/usr/bin). No LD_LIBRARY_PATH:
-	// nothing here links libc.
+	// PATH reaches containerd, ctr, the shim and runc — all in /usr/bin. No
+	// LD_LIBRARY_PATH: nothing here links libc.
 	env := append(os.Environ(),
-		"PATH=/usr/bin:/bin:"+virtiofsMount,
+		"PATH=/usr/bin:/bin",
 		"XDG_RUNTIME_DIR=/run",
 	)
 
@@ -134,7 +134,7 @@ func zeroCContainerdTest() {
 	}
 
 	// Import + run a container; the shim spawns our pure-Go runc to do it.
-	ctrImportAndRun(ctr, sock, env, logPath)
+	ctrImportAndRun(ctr, sock, env, logPath, zeroCImageTar)
 	fmt.Println("astrokube-init: ===== end zero-C containerd path =====")
 }
 
