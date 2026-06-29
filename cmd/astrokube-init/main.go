@@ -129,6 +129,11 @@ func main() {
 		usermapProbeChild()
 		return
 	}
+	// volume-hardening probe: a setuid binary re-exec'd to report its euid.
+	if os.Getenv(suidReportEnv) != "" {
+		fmt.Printf("euid=%d\n", os.Geteuid())
+		return
+	}
 	// A pod's container is this binary re-exec'd inside fresh namespaces; with
 	// CLONE_NEWPID it sees getpid()==1, so this guard must come first to keep it
 	// from recursing into the init logic.
@@ -242,6 +247,9 @@ func runAsInit() {
 	// Rootless id mapping: an unprivileged process maps its uid/gid so the
 	// container sees itself as root 0 (functional rootless).
 	runUsermapProbe()
+	// Volume hardening: a setuid binary on a nosuid volume can't grant root,
+	// and a noexec volume can't run code (closes the rootless-volume escalation).
+	runVolumeProbe()
 
 	// Act as the node agent: run the static pods, exercising the kernel's
 	// namespace and cgroup support end-to-end.
