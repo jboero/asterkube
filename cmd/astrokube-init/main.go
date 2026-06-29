@@ -78,6 +78,16 @@ func main() {
 		seccompProbeChild(mode)
 		return
 	}
+	// An astromac MAC probe role (re-exec'd by runMacProbe). "main" runs the
+	// scenario; "peer" is the second tenant it signals. Before PID-1 dispatch.
+	switch os.Getenv(macProbeEnv) {
+	case "main":
+		macProbeMain()
+		return
+	case "peer":
+		macProbePeer()
+		return
+	}
 	// A pod's container is this binary re-exec'd inside fresh namespaces; with
 	// CLONE_NEWPID it sees getpid()==1, so this guard must come first to keep it
 	// from recursing into the init logic.
@@ -174,6 +184,11 @@ func runAsInit() {
 	// isolated child processes so the (unremovable, inherited) filter never
 	// leaks into the node agent or container runtime.
 	runSeccompProbe()
+
+	// Prove the native astromac MAC mediates cross-tenant operations (the second
+	// hardening milestone). Permissive by default; the probe drives enforcing
+	// transiently in a child subtree and restores permissive.
+	runMacProbe()
 
 	// Act as the node agent: run the static pods, exercising the kernel's
 	// namespace and cgroup support end-to-end.
