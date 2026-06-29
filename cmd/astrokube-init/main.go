@@ -71,6 +71,13 @@ func main() {
 		fmt.Printf("shebang-probe argv: %v\n", os.Args)
 		return
 	}
+	// A seccomp enforcement probe child (re-exec'd by runSeccompProbe). It
+	// installs a real BPF filter and attempts the targeted syscall to prove the
+	// kernel enforces it. Must come before the PID-1 / kubelet dispatch.
+	if mode := os.Getenv(seccompProbeEnv); mode != "" {
+		seccompProbeChild(mode)
+		return
+	}
 	// A pod's container is this binary re-exec'd inside fresh namespaces; with
 	// CLONE_NEWPID it sees getpid()==1, so this guard must come first to keep it
 	// from recursing into the init logic.
@@ -161,6 +168,12 @@ func runAsInit() {
 	} else {
 		runContainerRuntimeTests()
 	}
+
+	// Prove the kernel ENFORCES seccomp BPF filters (errno + kill), the first
+	// hardening milestone toward the multi-tenant security posture. Runs in
+	// isolated child processes so the (unremovable, inherited) filter never
+	// leaks into the node agent or container runtime.
+	runSeccompProbe()
 
 	// Act as the node agent: run the static pods, exercising the kernel's
 	// namespace and cgroup support end-to-end.
