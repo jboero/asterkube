@@ -137,6 +137,14 @@ func runOCIRuntime(args []string) int {
 			i++ // takes a value ("text"/"json") as a separate arg — consume it
 		case strings.HasPrefix(a, "--log-format="):
 			// value attached; nothing to consume
+		case a == "--version", a == "-v", a == "version":
+			// `runc --version` is a global, not a subcommand; handle it here so it
+			// isn't swallowed by the generic "--" case below.
+			printRuncVersion()
+			return 0
+		case a == "--help", a == "-h":
+			fmt.Println("astrokube pure-Go OCI runtime (runc-compatible subset)")
+			return 0
 		case a == "--systemd-cgroup", a == "--debug", a == "--rootless":
 			// boolean flags we accept and ignore
 		case strings.HasPrefix(a, "--"):

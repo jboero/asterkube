@@ -141,7 +141,19 @@ func runNodeAgent() {
 	// ClusterIP whose DNAT rule was translated from kube-proxy's nftables ruleset
 	// (no prctl rule is programmed for them). kube-proxy ran earlier in the boot,
 	// so its rules are already in the kernel NAT table.
-	bridged = append(bridged, buildKubeProxyDemoSpecs()...)
+	//
+	// This only works when kube-proxy actually ran — i.e. the live-cluster path,
+	// which needs glibc. On the zero-C image kube-proxy is skipped (pureGoMode),
+	// so nothing programs the 10.96.0.10:53 VIP and the demo could only ever fail.
+	// The bridged-pod Service DNAT below (programmed by us) already proves the
+	// kernel NAT + load-balance path with zero C, so skip this cluster-only demo.
+	if pureGoMode() {
+		fmt.Println("astrokube-init: skipping the kube-proxy ClusterIP demo — kube-proxy")
+		fmt.Println("astrokube-init: does not run on the zero-C image; the bridged-pod Service")
+		fmt.Println("astrokube-init: DNAT below already exercises the kernel NAT + LB path.")
+	} else {
+		bridged = append(bridged, buildKubeProxyDemoSpecs()...)
+	}
 
 	if len(bridged) > 0 {
 		runBridgedPods(bridged)
