@@ -111,6 +111,15 @@ func main() {
 		usernsProbeChild()
 		return
 	}
+	// rootless capability-boundary probe roles.
+	switch os.Getenv(rootlessProbeEnv) {
+	case "unpriv":
+		rootlessProbeUnpriv()
+		return
+	case "userns":
+		rootlessProbeUserns()
+		return
+	}
 	// A pod's container is this binary re-exec'd inside fresh namespaces; with
 	// CLONE_NEWPID it sees getpid()==1, so this guard must come first to keep it
 	// from recursing into the init logic.
@@ -218,6 +227,9 @@ func runAsInit() {
 	runSocketMacProbe()
 	// User-namespace Stage 1: clone(CLONE_NEWUSER) creates a real namespace.
 	runUsernsProbe()
+	// Rootless: an unprivileged process gains capabilities inside its own user
+	// namespace but stays powerless on the host (the privesc boundary).
+	runRootlessProbe()
 
 	// Act as the node agent: run the static pods, exercising the kernel's
 	// namespace and cgroup support end-to-end.
