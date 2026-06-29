@@ -106,6 +106,11 @@ func main() {
 		socketMacProbePeer()
 		return
 	}
+	// user-namespace probe child (launched with CLONE_NEWUSER).
+	if os.Getenv(usernsProbeEnv) == "child" {
+		usernsProbeChild()
+		return
+	}
 	// A pod's container is this binary re-exec'd inside fresh namespaces; with
 	// CLONE_NEWPID it sees getpid()==1, so this guard must come first to keep it
 	// from recursing into the init logic.
@@ -211,6 +216,8 @@ func runAsInit() {
 	runFileMacProbe()
 	// ...and cross-tenant network connects on a shared network.
 	runSocketMacProbe()
+	// User-namespace Stage 1: clone(CLONE_NEWUSER) creates a real namespace.
+	runUsernsProbe()
 
 	// Act as the node agent: run the static pods, exercising the kernel's
 	// namespace and cgroup support end-to-end.
