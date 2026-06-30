@@ -46,12 +46,11 @@ type mountResult struct {
 	err     error
 }
 
-// defaultMounts is the set of virtual and virtio-backed filesystems a
-// Kubernetes node needs early. Pseudo-filesystems come first; the virtio block
-// devices are best-effort because a minimal boot may not attach them.
-//
-// The list intentionally mirrors the filesystems Asterinas' own reference init
-// shell script sets up, so behavior matches a known-good baseline.
+// defaultMounts is the set of essential pseudo-filesystems a Kubernetes node
+// needs early, before anything else runs. These are kernel infrastructure (not
+// "storage") and are always mounted; user/operator-configurable filesystems —
+// including the virtio block-device data volumes — live in /etc/fstab instead
+// (see mountFstab), which the init reads right after these come up.
 func defaultMounts() []mountSpec {
 	return []mountSpec{
 		{source: "proc", target: "/proc", fstype: "proc"},
@@ -61,9 +60,6 @@ func defaultMounts() []mountSpec {
 		{source: "tmpfs", target: "/run", fstype: "tmpfs"},
 		{source: "cgroup2", target: "/sys/fs/cgroup", fstype: "cgroup2"},
 		{source: "configfs", target: "/sys/kernel/config", fstype: "configfs"},
-		// virtio block devices (assume virtio wherever possible).
-		{source: "/dev/vda", target: "/ext2", fstype: "ext2", device: true},
-		{source: "/dev/vdb", target: "/exfat", fstype: "exfat", device: true},
 	}
 }
 

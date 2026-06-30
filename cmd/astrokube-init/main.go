@@ -203,6 +203,11 @@ func runAsInit() {
 	results := mountAll(defaultMounts())
 	report(results)
 
+	// Mount the operator-configurable filesystems listed in /etc/fstab (extra
+	// data volumes, partitions, tmpfs, virtio-fs shares). A documented default
+	// ships in the image; missing/failed entries are skipped, never fatal.
+	mountFstab()
+
 	// Provide `mount`/`umount` (this binary, multi-call) on PATH before any
 	// component that shells out to them — the kubelet's volume manager does, to
 	// set up pod volumes like the projected ServiceAccount-token tmpfs.
