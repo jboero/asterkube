@@ -271,6 +271,13 @@ func runAsInit() {
 	// to reach a kube-apiserver?
 	probeOutboundTCP()
 
+	// If the kernel cmdline carries cluster coordinates (ASTROKUBE_APISERVER=…),
+	// bind this generic image to that cluster now — no config drive, no cloud-init.
+	// The kubelet TLS-bootstraps with the token, registers the Node, and persists.
+	if bootArgsConfigured() {
+		bootArgsJoin()
+	}
+
 	// If the node came up live (containerd + the apiserver kubelet are running),
 	// keep it running as a persistent, interactive cluster member until an ACPI
 	// shutdown arrives. Otherwise the capability demos are done — power off.
