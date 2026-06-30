@@ -145,23 +145,8 @@ func dhcpFirst(iface string) bool {
 		lease.ip, prefix, lease.gateway, dnsStr, lease.leaseSec, lease.serverID)
 	networkConfigured = true
 
-	// Renewal self-test: prove a DHCPREQUEST refreshes the lease against this
-	// server now (rather than only at T1, hours away). Try RENEWING (unicast)
-	// first, then REBINDING (broadcast) — minimal servers like slirp may only
-	// answer the broadcast form. Non-fatal: the timer loop retries regardless.
-	renewed, rerr := dhcpRenew(mac, lease, false)
-	how := "RENEWING"
-	if rerr != nil {
-		renewed, rerr = dhcpRenew(mac, lease, true)
-		how = "REBINDING"
-	}
-	if rerr == nil {
-		lease = renewed
-		fmt.Printf("astrokube-init: DHCP renewal verified — %s request ACKed (lease=%ds) ✓\n", how, lease.leaseSec)
-	} else {
-		fmt.Printf("astrokube-init: DHCP renewal self-test: %v (the renew timer will retry)\n", rerr)
-	}
-	// Maintain the lease in the background: renew at T1 (½ lease), rebind at T2.
+	// Maintain the lease in the background: an immediate renewal check (does NOT
+	// delay boot — DHCP-first is done) followed by the T1/T2 timer loop.
 	go dhcpRenewLoop(mac, idx, lease)
 	return true
 }
@@ -223,6 +208,17 @@ func dhcpRenew(mac net.HardwareAddr, lease *dhcpLease, rebind bool) (*dhcpLease,
 // (½ the lease), rebinds (broadcast) at T2 (⅞), and re-acquires from scratch if
 // the lease is lost. Set ASTROKUBE_DHCP_RENEW_SEC to override T1 (for testing).
 func dhcpRenewLoop(mac net.HardwareAddr, idx int, lease *dhcpLease) {
+	// Immediate renewal self-test (async, so it never delays DHCP-first/boot):
+	// prove a DHCPREQUEST refreshes the lease now. Try RENEWING (unicast) then
+	// REBINDING (broadcast) — minimal servers like slirp answer only the latter.
+	if nl, e := dhcpRenew(mac, lease, false); e == nil {
+		lease = nl
+		fmt.Printf("astrokube-init: DHCP renewal verified — RENEWING ACKed (lease=%ds) ✓\n", lease.leaseSec)
+	} else if nl, e := dhcpRenew(mac, lease, true); e == nil {
+		lease = nl
+		fmt.Printf("astrokube-init: DHCP renewal verified — REBINDING ACKed (lease=%ds) ✓\n", lease.leaseSec)
+	}
+
 	for {
 		dur := time.Duration(lease.leaseSec) * time.Second
 		if dur <= 0 {
