@@ -411,6 +411,61 @@ func (s *nlSocket) linkIndexByName(name string) (int, error) {
 	}
 }
 
+// linkByName returns both the index and the hardware (MAC) address of the named
+// interface, dumping RTM_GETLINK and reading IFLA_IFNAME + IFLA_ADDRESS. The MAC
+// is needed as the DHCP client hardware address (chaddr).
+func (s *nlSocket) linkByName(name string) (int, net.HardwareAddr, error) {
+	seq, err := s.send(syscall.RTM_GETLINK,
+		syscall.NLM_F_REQUEST|syscall.NLM_F_DUMP, make([]byte, ifInfomsgLen))
+	if err != nil {
+		return 0, nil, err
+	}
+	for {
+		buf := make([]byte, 16384)
+		n, _, err := syscall.Recvfrom(s.fd, buf, 0)
+		if err != nil {
+			return 0, nil, err
+		}
+		msgs, err := syscall.ParseNetlinkMessage(buf[:n])
+		if err != nil {
+			return 0, nil, err
+		}
+		for _, m := range msgs {
+			if m.Header.Seq != seq {
+				continue
+			}
+			switch m.Header.Type {
+			case syscall.NLMSG_DONE:
+				return 0, nil, fmt.Errorf("interface %q not found", name)
+			case syscall.NLMSG_ERROR:
+				errno := int32(nlOrder.Uint32(m.Data[0:4]))
+				return 0, nil, fmt.Errorf("GETLINK dump: %w", syscall.Errno(-errno))
+			case syscall.RTM_NEWLINK:
+				ifi := (*syscall.IfInfomsg)(unsafe.Pointer(&m.Data[0]))
+				attrs, perr := syscall.ParseNetlinkRouteAttr(&m)
+				if perr != nil {
+					continue
+				}
+				matched := false
+				var mac net.HardwareAddr
+				for _, a := range attrs {
+					switch a.Attr.Type {
+					case iflaIfname:
+						matched = trimNul(a.Value) == name
+					case syscall.IFLA_ADDRESS:
+						if len(a.Value) == 6 {
+							mac = net.HardwareAddr(append([]byte(nil), a.Value...))
+						}
+					}
+				}
+				if matched {
+					return int(ifi.Index), mac, nil
+				}
+			}
+		}
+	}
+}
+
 // trimNul returns b without a trailing NUL byte, if present.
 func trimNul(b []byte) string {
 	if n := len(b); n > 0 && b[n-1] == 0 {

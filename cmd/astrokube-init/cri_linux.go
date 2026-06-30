@@ -56,7 +56,10 @@ func criPhase(ctrBin, crictlBin, sock string, env []string, logPath string) {
 	// copies; the minimal initramfs ships neither, so create them.
 	_ = os.MkdirAll("/etc", 0o755)
 	_ = os.WriteFile("/etc/hosts", []byte("127.0.0.1 localhost\n::1 localhost\n"), 0o644)
-	_ = os.WriteFile("/etc/resolv.conf", []byte("nameserver 10.0.2.3\n"), 0o644)
+	// Only seed a static resolver if DHCP didn't already write one from option 6.
+	if !networkConfigured {
+		_ = os.WriteFile("/etc/resolv.conf", []byte("nameserver 10.0.2.3\n"), 0o644)
+	}
 
 	_ = os.MkdirAll("/run/cri-logs", 0o755)
 	if err := os.WriteFile("/run/cri-pod.json", []byte(criPodConfig), 0o644); err != nil {

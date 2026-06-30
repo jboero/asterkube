@@ -49,15 +49,21 @@ func probeOutboundTCP() {
 		fmt.Printf("wan: SKIPPED (no eth0 interface: %v)\n", err)
 		return
 	}
-	if err := nl.addAddrV4(idx, net.IPv4(10, 0, 2, 15), 24); err != nil {
-		fmt.Printf("wan: FAILED to assign 10.0.2.15/24 to eth0: %v\n", err)
-		return
+	// DHCP-first already configured the interface; don't fight its lease with a
+	// static address. Only apply the static slirp config as a fallback.
+	if networkConfigured {
+		fmt.Println("wan: eth0 already configured by DHCP; using it")
+	} else {
+		if err := nl.addAddrV4(idx, net.IPv4(10, 0, 2, 15), 24); err != nil {
+			fmt.Printf("wan: FAILED to assign 10.0.2.15/24 to eth0: %v\n", err)
+			return
+		}
+		if err := nl.addDefaultRouteV4(net.IPv4(10, 0, 2, 2), idx); err != nil {
+			fmt.Printf("wan: FAILED to add default route via 10.0.2.2: %v\n", err)
+			return
+		}
+		fmt.Println("wan: eth0 configured 10.0.2.15/24, default via 10.0.2.2 (static fallback)")
 	}
-	if err := nl.addDefaultRouteV4(net.IPv4(10, 0, 2, 2), idx); err != nil {
-		fmt.Printf("wan: FAILED to add default route via 10.0.2.2: %v\n", err)
-		return
-	}
-	fmt.Println("wan: eth0 configured 10.0.2.15/24, default via 10.0.2.2")
 
 	// Under slirp the host is reachable from the guest at 10.0.2.2. The host
 	// runs a throwaway HTTP server on :18080 for this probe.

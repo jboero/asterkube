@@ -213,6 +213,11 @@ func runAsInit() {
 	// set up pod volumes like the projected ServiceAccount-token tmpfs.
 	installMountApplet()
 
+	// DHCP-first: bring up the primary interface (IP + default route + DNS) before
+	// anything else needs the network — the cloud-init / nomadinit model. Best
+	// effort: a bare boot with no DHCP server falls back to static config later.
+	dhcpFirst("eth0")
+
 	probeKernel()
 
 	// Exercise the new NETLINK_NETFILTER kernel surface (what nft/iptables use).

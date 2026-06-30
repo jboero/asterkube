@@ -273,6 +273,9 @@ func fetchAndVerifyClusterCA(apiserver, caHash string) (string, error) {
 // configureEth0BestEffort assigns eth0 the slirp address + default route, ignoring
 // "already configured" errors (the wan probe may have done it).
 func configureEth0BestEffort() {
+	if networkConfigured {
+		return // DHCP-first already brought the interface up
+	}
 	nl, err := nlOpen()
 	if err != nil {
 		return
