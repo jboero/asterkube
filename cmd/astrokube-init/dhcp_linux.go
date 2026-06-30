@@ -30,10 +30,15 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
 )
+
+// envDHCPRenewSec overrides the renewal interval T1 (seconds); for testing the
+// renew/rebind loop without waiting half a real lease.
+const envDHCPRenewSec = "ASTROKUBE_DHCP_RENEW_SEC"
 
 const (
 	dhcpServerPort = 67
@@ -139,7 +144,135 @@ func dhcpFirst(iface string) bool {
 	fmt.Printf("astrokube-init: DHCP OK — %s/%d via %s, dns=%s, lease=%ds (from %s) ✓\n",
 		lease.ip, prefix, lease.gateway, dnsStr, lease.leaseSec, lease.serverID)
 	networkConfigured = true
+
+	// Renewal self-test: prove a DHCPREQUEST refreshes the lease against this
+	// server now (rather than only at T1, hours away). Try RENEWING (unicast)
+	// first, then REBINDING (broadcast) — minimal servers like slirp may only
+	// answer the broadcast form. Non-fatal: the timer loop retries regardless.
+	renewed, rerr := dhcpRenew(mac, lease, false)
+	how := "RENEWING"
+	if rerr != nil {
+		renewed, rerr = dhcpRenew(mac, lease, true)
+		how = "REBINDING"
+	}
+	if rerr == nil {
+		lease = renewed
+		fmt.Printf("astrokube-init: DHCP renewal verified — %s request ACKed (lease=%ds) ✓\n", how, lease.leaseSec)
+	} else {
+		fmt.Printf("astrokube-init: DHCP renewal self-test: %v (the renew timer will retry)\n", rerr)
+	}
+	// Maintain the lease in the background: renew at T1 (½ lease), rebind at T2.
+	go dhcpRenewLoop(mac, idx, lease)
 	return true
+}
+
+// dhcpRenew refreshes an existing lease with a DHCPREQUEST in RENEWING (unicast
+// to the leasing server) or REBINDING (broadcast to any server) form, per RFC
+// 2131 §4.3.6: ciaddr = the current address, no requested-IP / server-id option.
+func dhcpRenew(mac net.HardwareAddr, lease *dhcpLease, rebind bool) (*dhcpLease, error) {
+	fd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_DGRAM, 0)
+	if err != nil {
+		return nil, fmt.Errorf("socket: %w", err)
+	}
+	defer syscall.Close(fd)
+	_ = syscall.SetNonblock(fd, true) // poll-based timeout; don't depend on SO_RCVTIMEO
+	_ = syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_BROADCAST, 1)
+	_ = syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1)
+	if err := syscall.Bind(fd, &syscall.SockaddrInet4{Port: dhcpClientPort}); err != nil {
+		return nil, fmt.Errorf("bind :68: %w", err)
+	}
+
+	dst := &syscall.SockaddrInet4{Port: dhcpServerPort, Addr: [4]byte{255, 255, 255, 255}}
+	if !rebind && lease.serverID != nil {
+		if v4 := lease.serverID.To4(); v4 != nil {
+			copy(dst.Addr[:], v4) // RENEWING: unicast to the leasing server
+		}
+	}
+	xid := uint32(time.Now().UnixNano())
+	pkt := buildDHCP(dhcpRequest, mac, xid, lease.ip /*ciaddr*/, nil, nil, rebind)
+	if err := syscall.Sendto(fd, pkt, 0, dst); err != nil {
+		return nil, fmt.Errorf("send REQUEST: %w", err)
+	}
+	ack, err := recvDHCP(fd, xid, dhcpAck, 4*time.Second)
+	if err != nil {
+		return nil, err
+	}
+	// Carry forward anything the renewal ACK omits.
+	if ack.mask == nil {
+		ack.mask = lease.mask
+	}
+	if ack.gateway == nil {
+		ack.gateway = lease.gateway
+	}
+	if len(ack.dns) == 0 {
+		ack.dns = lease.dns
+	}
+	if ack.serverID == nil {
+		ack.serverID = lease.serverID
+	}
+	if ack.leaseSec == 0 {
+		ack.leaseSec = lease.leaseSec
+	}
+	if ack.ip == nil || ack.ip.IsUnspecified() {
+		ack.ip = lease.ip
+	}
+	return ack, nil
+}
+
+// dhcpRenewLoop maintains the lease for the life of the node: it renews at T1
+// (½ the lease), rebinds (broadcast) at T2 (⅞), and re-acquires from scratch if
+// the lease is lost. Set ASTROKUBE_DHCP_RENEW_SEC to override T1 (for testing).
+func dhcpRenewLoop(mac net.HardwareAddr, idx int, lease *dhcpLease) {
+	for {
+		dur := time.Duration(lease.leaseSec) * time.Second
+		if dur <= 0 {
+			dur = time.Hour
+		}
+		t1 := dur / 2
+		t2 := dur * 7 / 8
+		if s := strings.TrimSpace(os.Getenv(envDHCPRenewSec)); s != "" {
+			if n, e := strconv.Atoi(s); e == nil && n > 0 {
+				t1 = time.Duration(n) * time.Second
+				t2 = t1 + t1/2
+			}
+		}
+
+		time.Sleep(t1)
+		if nl, e := dhcpRenew(mac, lease, false); e == nil {
+			lease = nl
+			applyLeaseDelta(idx, lease)
+			fmt.Printf("astrokube-init: DHCP renewed (RENEWING) — lease=%ds via %s ✓\n", lease.leaseSec, lease.serverID)
+			continue
+		}
+		time.Sleep(t2 - t1) // RENEWING failed; wait until T2 then rebind
+		if nl, e := dhcpRenew(mac, lease, true); e == nil {
+			lease = nl
+			applyLeaseDelta(idx, lease)
+			fmt.Printf("astrokube-init: DHCP renewed (REBINDING) — lease=%ds ✓\n", lease.leaseSec)
+			continue
+		}
+		fmt.Println("astrokube-init: DHCP renew+rebind failed; re-DISCOVERing a fresh lease")
+		if nl, e := dhcpAcquire(mac, uint32(time.Now().UnixNano()), 4*time.Second); e == nil {
+			lease = nl
+			applyLeaseDelta(idx, lease)
+		} else {
+			time.Sleep(30 * time.Second) // keep the current address; back off and retry
+		}
+	}
+}
+
+// applyLeaseDelta re-applies a (possibly refreshed) lease: address + default
+// route (re-adding an unchanged address is harmless) and DNS.
+func applyLeaseDelta(idx int, lease *dhcpLease) {
+	prefix, _ := lease.mask.Size()
+	if nl, err := nlOpen(); err == nil {
+		_ = nl.addAddrV4(idx, lease.ip, prefix)
+		if lease.gateway != nil && !lease.gateway.IsUnspecified() {
+			_ = nl.addDefaultRouteV4(lease.gateway, idx)
+		}
+		nl.close()
+	}
+	writeResolvConf(lease.dns)
 }
 
 // dhcpAcquire performs DISCOVER -> OFFER -> REQUEST -> ACK over UDP broadcast.
@@ -149,32 +282,31 @@ func dhcpAcquire(mac net.HardwareAddr, xid uint32, timeout time.Duration) (*dhcp
 		return nil, fmt.Errorf("socket: %w", err)
 	}
 	defer syscall.Close(fd)
+	_ = syscall.SetNonblock(fd, true) // poll-based timeout; don't depend on SO_RCVTIMEO
 	_ = syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_BROADCAST, 1)
 	_ = syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1)
 	if err := syscall.Bind(fd, &syscall.SockaddrInet4{Port: dhcpClientPort}); err != nil {
 		return nil, fmt.Errorf("bind :68: %w", err)
 	}
-	tv := syscall.NsecToTimeval(int64(timeout))
-	_ = syscall.SetsockoptTimeval(fd, syscall.SOL_SOCKET, syscall.SO_RCVTIMEO, &tv)
 	bcast := &syscall.SockaddrInet4{Port: dhcpServerPort, Addr: [4]byte{255, 255, 255, 255}}
 
 	// DISCOVER (retry a few times in case the first frame is lost during link-up).
 	var offer *dhcpLease
 	for try := 0; try < 3 && offer == nil; try++ {
-		if err := syscall.Sendto(fd, buildDHCP(dhcpDiscover, mac, xid, nil, nil), 0, bcast); err != nil {
+		if err := syscall.Sendto(fd, buildDHCP(dhcpDiscover, mac, xid, nil, nil, nil, true), 0, bcast); err != nil {
 			return nil, fmt.Errorf("send DISCOVER: %w", err)
 		}
-		offer, _ = recvDHCP(fd, xid, dhcpOffer)
+		offer, _ = recvDHCP(fd, xid, dhcpOffer, 2*time.Second)
 	}
 	if offer == nil {
 		return nil, fmt.Errorf("no DHCPOFFER")
 	}
 
-	// REQUEST the offered address.
-	if err := syscall.Sendto(fd, buildDHCP(dhcpRequest, mac, xid, offer.ip, offer.serverID), 0, bcast); err != nil {
+	// REQUEST the offered address (SELECTING: echo offered IP + server id).
+	if err := syscall.Sendto(fd, buildDHCP(dhcpRequest, mac, xid, nil, offer.ip, offer.serverID, true), 0, bcast); err != nil {
 		return nil, fmt.Errorf("send REQUEST: %w", err)
 	}
-	ack, err := recvDHCP(fd, xid, dhcpAck)
+	ack, err := recvDHCP(fd, xid, dhcpAck, 4*time.Second)
 	if err != nil {
 		return nil, fmt.Errorf("no DHCPACK: %w", err)
 	}
@@ -194,14 +326,24 @@ func dhcpAcquire(mac net.HardwareAddr, xid uint32, timeout time.Duration) (*dhcp
 	return ack, nil
 }
 
-// buildDHCP assembles a BOOTP/DHCP request of the given message type.
-func buildDHCP(msgType byte, mac net.HardwareAddr, xid uint32, reqIP, serverID net.IP) []byte {
+// buildDHCP assembles a BOOTP/DHCP request of the given message type. ciaddr is
+// the client's current address (set when RENEWING/REBINDING, zero otherwise);
+// broadcast asks the server to broadcast its reply (used before the client can
+// receive unicast, i.e. has no address yet).
+func buildDHCP(msgType byte, mac net.HardwareAddr, xid uint32, ciaddr, reqIP, serverID net.IP, broadcast bool) []byte {
 	p := make([]byte, 240) // 236 BOOTP header + 4 magic cookie
 	p[0] = bootpRequest
 	p[1] = htypeEth
 	p[2] = 6 // hlen
 	binary.BigEndian.PutUint32(p[4:8], xid)
-	binary.BigEndian.PutUint16(p[10:12], dhcpFlagBroadcast)
+	if broadcast {
+		binary.BigEndian.PutUint16(p[10:12], dhcpFlagBroadcast)
+	}
+	if ciaddr != nil {
+		if v4 := ciaddr.To4(); v4 != nil {
+			copy(p[12:16], v4) // ciaddr
+		}
+	}
 	copy(p[28:34], mac) // chaddr
 	copy(p[236:240], dhcpMagicCookie[:])
 
@@ -225,13 +367,21 @@ func buildDHCP(msgType byte, mac net.HardwareAddr, xid uint32, reqIP, serverID n
 
 // recvDHCP reads replies until one matches xid and the wanted message type, or
 // the socket times out.
-func recvDHCP(fd int, xid uint32, want byte) (*dhcpLease, error) {
+// recvDHCP waits up to timeout for a DHCP reply matching xid and the wanted
+// message type. The socket is non-blocking, so a missing reply is a poll-loop
+// timeout rather than an indefinite block (Asterinas does not reliably honor
+// SO_RCVTIMEO, so we must not depend on it).
+func recvDHCP(fd int, xid uint32, want byte, timeout time.Duration) (*dhcpLease, error) {
 	buf := make([]byte, 1500)
-	deadline := time.Now().Add(6 * time.Second)
+	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		n, _, err := syscall.Recvfrom(fd, buf, 0)
 		if err != nil {
-			return nil, err // typically EAGAIN on timeout
+			if err == syscall.EAGAIN || err == syscall.EWOULDBLOCK {
+				time.Sleep(50 * time.Millisecond)
+				continue
+			}
+			return nil, err
 		}
 		if n < 240 {
 			continue
