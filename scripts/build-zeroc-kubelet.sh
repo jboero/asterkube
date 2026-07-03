@@ -5,27 +5,27 @@
 #
 # How: the real kubelet command lives in k8s.io/kubernetes (cmd/kubelet/app),
 # which our k8s.io/kubelet staging module can't import. So we assemble a combined
-# `cmd/astrokube-kubelet` package INSIDE a kubernetes checkout: our init sources
+# `cmd/asterkube-kubelet` package INSIDE a kubernetes checkout: our init sources
 # (everything except the placeholder kubelet_entry_stub.go) plus a real entry
 # that runs the upstream kubelet command. Then `CGO_ENABLED=0 go build`.
 #
 # Output: a single binary that is the kubelet (default), our init (as PID 1),
 # our runc (argv0=runc), and mount/umount (argv0=mount/umount) — all zero C.
 #
-# Usage: astrokube/build-zeroc-kubelet.sh [output-path]
+# Usage: asterkube/build-zeroc-kubelet.sh [output-path]
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
-KUBELET_SRC=${KUBELET_REPO:-$(cd "$(dirname "$0")/.." && pwd)}/cmd/astrokube-init
+KUBELET_SRC=${KUBELET_REPO:-$(cd "$(dirname "$0")/.." && pwd)}/cmd/asterkube-init
 K8S=${K8S_SRC:-$(cd "$(dirname "$0")/.." && pwd)/kubernetes}
 K8S_VERSION=${K8S_VERSION:-v1.35.6}
-OUT=${1:-$(cd "$(dirname "$0")/.." && pwd)/build/astrokube-kubelet}
+OUT=${1:-$(cd "$(dirname "$0")/.." && pwd)/build/asterkube-kubelet}
 
 if [ ! -d "$K8S/cmd/kubelet" ]; then
   echo "==> cloning kubernetes $K8S_VERSION (shallow)"
   git clone --depth 1 --branch "$K8S_VERSION" https://github.com/kubernetes/kubernetes "$K8S"
 fi
 
-PKG="$K8S/cmd/astrokube-kubelet"
+PKG="$K8S/cmd/asterkube-kubelet"
 echo "==> assembling combined package at $PKG"
 rm -rf "$PKG"; mkdir -p "$PKG"
 # Our init sources, minus the standalone-only kubelet stub.
@@ -61,7 +61,7 @@ GO
 echo "==> building (CGO_ENABLED=0) — this is heavy (~minutes)"
 LDFLAGS="-s -w -X k8s.io/component-base/version.gitVersion=$K8S_VERSION"
 ( cd "$K8S" && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOFLAGS=-trimpath \
-    go build -ldflags="$LDFLAGS" -o "$OUT" ./cmd/astrokube-kubelet )
+    go build -ldflags="$LDFLAGS" -o "$OUT" ./cmd/asterkube-kubelet )
 
 echo "==> verifying zero C"
 link=$(file -b "$OUT" | grep -oE 'statically linked|dynamically linked' || true)

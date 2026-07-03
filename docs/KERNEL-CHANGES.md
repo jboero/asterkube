@@ -1,8 +1,8 @@
-# astrokube kernel changes — Part 1 progress
+# asterkube kernel changes — Part 1 progress
 
 Changes made to the Asterinas kernel (`asterkube` branch) to move toward running
 Kubernetes. Every item below was verified by booting the kernel under QEMU and
-exercising it from the astrokube PID 1 init's capability probe
+exercising it from the asterkube PID 1 init's capability probe
 (`capability-probe-after.log`). `cargo fmt --check` and `cargo osdk clippy` are
 clean.
 
@@ -213,7 +213,7 @@ Because netlink's namespace model is "the socket acts in its own netns", address
 assignment is split exactly as real CNI splits it: the node agent (host netns)
 creates the pair + addresses the host end, then the pod (its own netns) addresses
 its `eth0`. The Go side drives this with a tiny dependency-free raw-netlink client
-(in the out-of-tree astrokube init) speaking the same wire format as
+(in the out-of-tree asterkube init) speaking the same wire format as
 iproute2 / `vishvananda/netlink`.
 
 **Verified on hardware** (`rtnetlink-veth-verified.log`): the node agent creates

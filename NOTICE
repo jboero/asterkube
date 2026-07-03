@@ -33,6 +33,6 @@ Apache-2.0 zero-C node binary. This is mere aggregation; each file retains its
 own license. Corresponding source for the MPL-2.0 kernel is available at the
 Asterinas fork referenced above.
 
-Portions of cmd/astrokube-init/ were seeded from Kubernetes source and retain
+Portions of cmd/asterkube-init/ were seeded from Kubernetes source and retain
 "Copyright The Kubernetes Authors" headers under Apache-2.0; modifications and
 new files are Copyright 2026 Upbound, Inc., also under Apache-2.0.

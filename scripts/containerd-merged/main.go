@@ -16,7 +16,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Command astrokube-containerd is a busybox-style multi-call binary that folds
+// Command asterkube-containerd is a busybox-style multi-call binary that folds
 // the containerd daemon and the ctr CLI — the same Go module
 // (github.com/containerd/containerd/v2) — into ONE static, CGO-free binary, so
 // the share carries a single copy of the Go runtime and the entire containerd

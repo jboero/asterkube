@@ -1,7 +1,7 @@
-# astrokube Security Posture & Architecture
+# asterkube Security Posture & Architecture
 
 **Status:** roadmap largely DELIVERED + verified in-VM (2026-06-29). Milestone
-tag `astrokube-hardening`.
+tag `asterkube-hardening`.
 **Threat model:** multi-tenant *untrusted* workloads on a shared Asterinas node
 **Approach:** hybrid — retrofit cheap high-value Linux mechanisms now; design a
 framekernel-native isolation model for the deep tenancy boundary over time.
@@ -12,7 +12,7 @@ framekernel-native isolation model for the deep tenancy boundary over time.
   own userns subtree" via ns ancestry, NO global capset widening, so direct
   cap checks deny host access by construction) + uid/gid mapping (container sees
   uid 0, mapped to an unprivileged host uid). `asterinas cf06bc683`+`00427f5d5`.
-  Tag `astrokube-rootless`. See `astrokube/USER-NAMESPACES.md`.
+  Tag `asterkube-rootless`. See `asterkube/USER-NAMESPACES.md`.
 - ✅ **volume-mount hardening** — kernel now ENFORCES `nosuid`/`noexec`/`nodev`
   (it stored but ignored them): a setuid binary on a nosuid volume can't escalate
   and code on a noexec volume can't run. Closes the "rootless container + writable
@@ -50,13 +50,13 @@ framekernel-native isolation model for the deep tenancy boundary over time.
   enforcing), demonstrated with two real pods where tn1 is denied connecting to
   tn2. `kubelet 5990501`. This is where a launcher would map a
   namespace/seLinuxOptions/annotation onto astromac.
-  Tags `astrokube-sec-phase2` (signal+file), later commits on `asterkube`.
+  Tags `asterkube-sec-phase2` (signal+file), later commits on `asterkube`.
 - ⏭ **Next:** user namespaces + uid_map (Tier A #2) — assessed; see
-  `astrokube/USER-NAMESPACES.md` for the staged plan. Security-critical (a bug =
+  `asterkube/USER-NAMESPACES.md` for the staged plan. Security-critical (a bug =
   privesc), so staged with a human in the loop for the privilege-check rewrite
   (Stage 3). Also: capability drop-set audit (Tier A #3); CRI setns-into-PID-ns.
 
-Baseline before this work: git tag `astrokube-zero-c-baseline`.
+Baseline before this work: git tag `asterkube-zero-c-baseline`.
 
 ---
 
@@ -223,7 +223,7 @@ Each phase keeps the zero-C invariant and the prior milestones green.
 ## 7. Measuring it (don't claim, prove)
 
 For every item: a boot-tested in-guest probe (like the existing capability/
-namespace probes in `cmd/astrokube-init`) that *attempts the attack and shows it
+namespace probes in `cmd/asterkube-init`) that *attempts the attack and shows it
 blocked*. E.g. seccomp: a pod that calls a denied syscall and is killed; userns:
 a pod uid 0 that tries a node-privileged op and gets EPERM with the mapped uid.
 A failing probe is the acceptance test, not a passing one.

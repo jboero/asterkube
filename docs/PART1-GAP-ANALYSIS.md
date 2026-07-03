@@ -8,7 +8,7 @@
 > cgroup cpu/memory enforcement, and the PID refinements noted in KERNEL-CHANGES.
 
 
-Combines **runtime probing** (the astrokube init's capability probe, booted on the
+Combines **runtime probing** (the asterkube init's capability probe, booted on the
 real kernel — see [`capability-probe.log`](capability-probe.log)) with a
 **source audit** of `kernel/src`. The two agree.
 

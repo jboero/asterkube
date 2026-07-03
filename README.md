@@ -37,7 +37,7 @@ enforcement, a Service NAT datapath, an nftables-compatible netlink surface — 
 
 ```
         asterkube  (this repo, Apache-2.0)
-        ├── cmd/astrokube-init/   ← our Go node agent (the CGO-free kubelet)
+        ├── cmd/asterkube-init/   ← our Go node agent (the CGO-free kubelet)
         ├── scripts/              ← build + packaging pipeline
         ├── asterinas/  (submodule) → jboero/asterinas @ asterkube   (kernel, MPL-2.0)
         └── kubernetes/ (build-fetched @ v1.35.6, gitignored)        (kubelet source, Apache-2.0)
@@ -47,14 +47,14 @@ enforcement, a Service NAT datapath, an nftables-compatible netlink surface — 
   kernel work (namespaces, seccomp, astromac MAC, the NAT datapath, …) live there.
 - **`kubernetes`** is *not* vendored. The build fetches the pinned tag `v1.35.6`
   on demand, because compiling the real `cmd/kubelet/app` needs the full tree.
-- **`cmd/astrokube-init/`** is our original Go — additive code that imports
+- **`cmd/asterkube-init/`** is our original Go — additive code that imports
   Kubernetes, not a fork of it.
 
 ## Repository layout
 
 | Path | What |
 |---|---|
-| `cmd/astrokube-init/` | The Go node agent — init, kubelet fusion, pure-Go OCI runtime, DHCP, MAC/seccomp probes |
+| `cmd/asterkube-init/` | The Go node agent — init, kubelet fusion, pure-Go OCI runtime, DHCP, MAC/seccomp probes |
 | `scripts/` | Build + packaging pipeline (see below) |
 | `config/fstab.default` | Documented default `/etc/fstab` baked into the image |
 | `docs/` | `FEATURES.md`, `SECURITY-POSTURE.md`, `USER-NAMESPACES.md`, `KERNEL-CHANGES.md`, verification logs |
@@ -63,7 +63,7 @@ enforcement, a Service NAT datapath, an nftables-compatible netlink surface — 
 
 ## Build
 
-Prerequisites: Docker (the Asterinas OSDK build container, named `astrokube`), Go,
+Prerequisites: Docker (the Asterinas OSDK build container, named `asterkube`), Go,
 `qemu-system-x86_64`, and the usual initramfs tooling (`cpio`, `gzip`, `readelf`).
 
 ```bash
@@ -81,7 +81,7 @@ scripts/build-containerd-merged.sh
 scripts/build-zeroc-kubelet.sh
 
 # 3. bake the zero-C initramfs and rebuild the bootable ISO
-INIT_BIN=build/astrokube-kubelet scripts/zero-c-initramfs.sh
+INIT_BIN=build/asterkube-kubelet scripts/zero-c-initramfs.sh
 
 # 4. (optional) convert the ISO to a QCOW2 disk
 scripts/build-qcow2.sh
@@ -92,14 +92,14 @@ Artifacts land in `asterinas/target/osdk/` (ISO) and `asterinas/test/initramfs/b
 ## Run
 
 ```bash
-scripts/../asterinas/run-host-qemu.sh astrokube        # boot the ISO under QEMU (slirp NIC)
+scripts/../asterinas/run-host-qemu.sh asterkube        # boot the ISO under QEMU (slirp NIC)
 ```
 
 To **join a cluster**, generate boot args (this writes a short-lived
 bootstrap-token to *your* cluster), add them to the kernel cmdline, and rebuild:
 
 ```bash
-scripts/astrokube-boot-args.sh -n my-node   # prints ASTROKUBE_* lines
+scripts/asterkube-boot-args.sh -n my-node   # prints ASTERKUBE_* lines
 # paste them into asterinas/OSDK.toml [run.boot] kcmd_args, then re-run zero-c-initramfs.sh
 ```
 

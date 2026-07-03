@@ -1,10 +1,10 @@
 # containerd-merged
 
-`main.go` is the source of record for astrokube's merged **containerd + ctr**
+`main.go` is the source of record for asterkube's merged **containerd + ctr**
 multi-call binary. There is intentionally **no `go.mod`/`go.sum` here**: the file
 is not built standalone. `../build-containerd-merged.sh` copies the exact
 `github.com/containerd/containerd/v2 @ v2.2.3` module out of the Go module cache
-into a writable scratch dir, drops this file in as `cmd/astrokube-containerd/`,
+into a writable scratch dir, drops this file in as `cmd/asterkube-containerd/`,
 and builds it there so the module's own `go.mod`/`go.sum` drive dependency
 resolution (matching the previously-verified standalone binaries). Editors will
 flag the containerd imports as unresolved here — that's expected.

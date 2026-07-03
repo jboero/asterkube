@@ -1,29 +1,29 @@
 #!/usr/bin/env bash
 #
-# live-demo.sh — one command to bring the astrokube node up as a LIVE,
+# live-demo.sh — one command to bring the asterkube node up as a LIVE,
 # interactive Kubernetes node and tear it down gracefully.
 #
-#   astrokube/live-demo.sh            boot, wait until the node is LIVE, then
+#   asterkube/live-demo.sh            boot, wait until the node is LIVE, then
 #                                     hand control back to you. Ctrl-C powers the
 #                                     node off the way a real node shuts down:
 #                                     an ACPI power-button event the kernel turns
 #                                     into a graceful in-guest drain.
 #
-#   astrokube/live-demo.sh --restage  re-stage the virtio-fs share + kubeconfig
+#   asterkube/live-demo.sh --restage  re-stage the virtio-fs share + kubeconfig
 #                                     first (needed after a host reboot — the
 #                                     share lives on tmpfs).
 #
 # Prereqilites already covered by the project tooling: the dev container
-# `astrokube` is running and target/osdk/aster-kernel-osdk-bin.iso is built.
-# This is local host tooling (the astrokube/ dir is gitignored), not in the repo.
+# `asterkube` is running and target/osdk/aster-kernel-osdk-bin.iso is built.
+# This is local host tooling (the asterkube/ dir is gitignored), not in the repo.
 
 set -u
 cd "$(dirname "$0")/../asterinas"   # asterinas/
 
 ISO=target/osdk/aster-kernel-osdk-bin.iso
-QMP_SOCK=astrokube-qmp.sock
-BOOT_LOG=astrokube-live.log
-LIVE_MARK="astrokube node is LIVE"
+QMP_SOCK=asterkube-qmp.sock
+BOOT_LOG=asterkube-live.log
+LIVE_MARK="asterkube node is LIVE"
 RESTAGE=0
 [ "${1:-}" = "--restage" ] && RESTAGE=1
 
@@ -33,12 +33,12 @@ die()  { printf '\033[1;31mxx  %s\033[0m\n' "$*" >&2; exit 1; }
 
 # --- preflight ---------------------------------------------------------------
 command -v qemu-system-x86_64 >/dev/null || die "qemu-system-x86_64 not found"
-[ -f "$ISO" ] || die "missing $ISO — build it: docker exec astrokube bash -lc 'cd /root/asterinas/kernel && cargo osdk build --release --strip-elf --grub-boot-protocol=multiboot2'"
+[ -f "$ISO" ] || die "missing $ISO — build it: docker exec asterkube bash -lc 'cd /root/asterinas/kernel && cargo osdk build --release --strip-elf --grub-boot-protocol=multiboot2'"
 
 if [ "$RESTAGE" = 1 ]; then
   note "re-staging virtio-fs share + node kubeconfig"
-  bash astrokube/stage-virtiofs.sh || die "stage-virtiofs failed"
-  bash astrokube/make-node-kubeconfig.sh astrokube || warn "make-node-kubeconfig failed (node may not register)"
+  bash asterkube/stage-virtiofs.sh || die "stage-virtiofs failed"
+  bash asterkube/make-node-kubeconfig.sh asterkube || warn "make-node-kubeconfig failed (node may not register)"
 fi
 
 note "killing any stale VM and refreshing the ext2 disk"
@@ -46,7 +46,7 @@ pkill -9 qemu-system-x86 2>/dev/null
 pkill -9 virtiofsd 2>/dev/null
 rm -f "$QMP_SOCK"
 sleep 1
-bash astrokube/fresh-ext2.sh >/dev/null || die "fresh-ext2 failed"
+bash asterkube/fresh-ext2.sh >/dev/null || die "fresh-ext2 failed"
 
 # --- graceful shutdown via the ACPI power button -----------------------------
 powerdown() {
@@ -83,8 +83,8 @@ on_int() {
 
 # --- boot --------------------------------------------------------------------
 : > "$BOOT_LOG"
-note "booting the astrokube node (log: $BOOT_LOG)"
-./run-host-qemu.sh astrokube > "$BOOT_LOG" 2>&1 &
+note "booting the asterkube node (log: $BOOT_LOG)"
+./run-host-qemu.sh asterkube > "$BOOT_LOG" 2>&1 &
 sleep 6
 QEMU_PID=$(pgrep -n qemu-system-x86)
 [ -n "$QEMU_PID" ] || die "qemu failed to start — see $BOOT_LOG"
@@ -104,26 +104,26 @@ done
 bar=$(printf '\033[1;32m%s\033[0m' "========================================================================")
 printf '\n%s\n' "$bar"
 cat <<EOF
- The astrokube node is LIVE and persistent.
+ The asterkube node is LIVE and persistent.
 
  From another terminal on this host:
-   kubectl get nodes -o wide                  # 'astrokube' shows Ready
-   kubectl get pods -A -o wide | grep astrokube
+   kubectl get nodes -o wide                  # 'asterkube' shows Ready
+   kubectl get pods -A -o wide | grep asterkube
 
  Schedule a workload onto it (tolerates the experimental taint):
    cat <<'POD' | kubectl apply -f -
    apiVersion: v1
    kind: Pod
-   metadata: { name: astrokube-live, namespace: default }
+   metadata: { name: asterkube-live, namespace: default }
    spec:
-     nodeSelector: { kubernetes.io/hostname: astrokube }
+     nodeSelector: { kubernetes.io/hostname: asterkube }
      tolerations: [{ operator: Exists }]
      hostNetwork: true
      restartPolicy: Never
      containers:
      - { name: pause, image: registry.k8s.io/pause:3.10.1, imagePullPolicy: Never }
    POD
-   kubectl get pod astrokube-live -o wide -w   # -> Running on astrokube
+   kubectl get pod asterkube-live -o wide -w   # -> Running on asterkube
 
  Live boot log: tail -f $BOOT_LOG
 

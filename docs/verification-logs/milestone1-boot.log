@@ -31,11 +31,11 @@ Spawn the first kernel thread
 
 
 ============================================================
- astrokube-init: running as PID 1 on the Asterinas kernel
+ asterkube-init: running as PID 1 on the Asterinas kernel
  Rust kernel + Go init, no C, no libc.
 ============================================================
 
-astrokube-init: mounting filesystems
+asterkube-init: mounting filesystems
   [ ok ] /proc                (proc)
   [ ok ] /sys                 (sysfs)
   [skip] /dev                 (devtmpfs): already populated by kernel
@@ -45,4 +45,4 @@ astrokube-init: mounting filesystems
   [ ok ] /sys/kernel/config   (configfs)
   [ ok ] /ext2                (ext2)
   [ ok ] /exfat               (exfat)
-astrokube-init: milestone 1 complete (filesystems mounted). Powering off.
+asterkube-init: milestone 1 complete (filesystems mounted). Powering off.

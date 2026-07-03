@@ -16,14 +16,14 @@
 # its CA-signed client cert; only server-name verification is skipped. This is a
 # first-join scaffold, not the final posture.
 #
-# Usage: astrokube/make-node-kubeconfig.sh [node-name] [share-dir]
+# Usage: asterkube/make-node-kubeconfig.sh [node-name] [share-dir]
 set -euo pipefail
 cd "$(dirname "$0")/../asterinas"                       # asterinas/
 
-NODE=${1:-astrokube}
-SHARE=${2:-/tmp/astrokube-vfs}
-CSR_NAME="astrokube-node-${NODE}"
-WORK=$(mktemp -d /tmp/astrokube-kubeconfig.XXXXXX)
+NODE=${1:-asterkube}
+SHARE=${2:-/tmp/asterkube-vfs}
+CSR_NAME="asterkube-node-${NODE}"
+WORK=$(mktemp -d /tmp/asterkube-kubeconfig.XXXXXX)
 trap 'rm -rf "$WORK"' EXIT
 
 # Host port the apiserver is published on (maps to the control-plane's 6443).

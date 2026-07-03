@@ -4,7 +4,7 @@
 # linked or C-static binaries). Only the static, CGO-free Go init remains.
 #
 # It takes the normal staged initramfs and:
-#   * swaps in a fresh CGO_ENABLED=0 astrokube-init,
+#   * swaps in a fresh CGO_ENABLED=0 asterkube-init,
 #   * deletes /lib64 + /lib (the glibc closure),
 #   * deletes every dynamically-linked binary (e.g. the upstream runc),
 #   * verifies NOTHING ELF-dynamic survives,
@@ -15,13 +15,13 @@
 # real namespaced + cgroup-limited containers via clone() directly — no runc,
 # no containerd, no C.
 #
-# Usage: astrokube/zero-c-initramfs.sh [path-to-kubelet-repo]
+# Usage: asterkube/zero-c-initramfs.sh [path-to-kubelet-repo]
 set -euo pipefail
 cd "$(dirname "$0")/../asterinas"                       # asterinas/
 KUBELET=${1:-$(cd "$(dirname "$0")/.." && pwd)}
 BUILD=test/initramfs/build
 CPIO="$BUILD/initramfs.cpio.gz"
-WORK=$(mktemp -d /tmp/astrokube-zeroc.XXXXXX)
+WORK=$(mktemp -d /tmp/asterkube-zeroc.XXXXXX)
 trap 'rm -rf "$WORK"' EXIT
 
 # The finished image is SELF-CONTAINED: the static container runtime and the
@@ -29,7 +29,7 @@ trap 'rm -rf "$WORK"' EXIT
 # a virtio-fs share during development). Source them from the static-bins dir
 # (containerd + shim, built by build-containerd-merged.sh) and the hello image.
 STATIC_BINS=${STATIC_BINS:-$(cd "$(dirname "$0")/.." && pwd)/build/static-bins}
-HELLO_TAR=${HELLO_TAR:-/tmp/astrokube-vfs-zeroc/hello.tar}
+HELLO_TAR=${HELLO_TAR:-/tmp/asterkube-vfs-zeroc/hello.tar}
 
 # INIT_BIN lets us drop in a pre-built binary — e.g. the COMBINED zero-C kubelet
 # (real upstream kubelet + our init), built by build-zeroc-kubelet.sh. Otherwise
@@ -38,9 +38,9 @@ if [ -n "${INIT_BIN:-}" ]; then
   echo "==> using pre-built init binary: $INIT_BIN"
   cp "$INIT_BIN" "$WORK/init-bin"; chmod 0755 "$WORK/init-bin"
 else
-  echo "==> building astrokube-init (static, CGO_ENABLED=0) from $KUBELET"
+  echo "==> building asterkube-init (static, CGO_ENABLED=0) from $KUBELET"
   ( cd "$KUBELET" && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-      go build -ldflags="-s -w" -o "$WORK/init-bin" ./cmd/astrokube-init )
+      go build -ldflags="-s -w" -o "$WORK/init-bin" ./cmd/asterkube-init )
 fi
 
 echo "==> extracting staged initramfs $CPIO"
@@ -52,7 +52,7 @@ mkdir -p "$WORK/root"
 # it is also the OCI runtime, mount/umount applet, etc. via argv[0] multi-call.
 echo "==> swapping in fresh static init (single binary, no duplicate)"
 install -m 0755 "$WORK/init-bin" "$WORK/root/usr/bin/kubelet"
-rm -f "$WORK/root/usr/bin/astrokube-init"
+rm -f "$WORK/root/usr/bin/asterkube-init"
 
 # Bake the static container runtime + image into the initramfs so the image is
 # self-contained (no virtio-fs share). containerd and ctr are one binary (hard
@@ -68,10 +68,10 @@ done
 # empty file) keeps argv[0] dispatch working (exec'ing /usr/bin/ctr keeps
 # argv[0]="ctr").
 ln -sf containerd "$WORK/root/usr/bin/ctr"
-mkdir -p "$WORK/root/usr/share/astrokube"
+mkdir -p "$WORK/root/usr/share/asterkube"
 if [ -f "$HELLO_TAR" ]; then
-  install -m 0644 "$HELLO_TAR" "$WORK/root/usr/share/astrokube/hello.tar"
-  echo "    image: usr/share/astrokube/hello.tar"
+  install -m 0644 "$HELLO_TAR" "$WORK/root/usr/share/asterkube/hello.tar"
+  echo "    image: usr/share/asterkube/hello.tar"
 else
   echo "    !! missing hello image $HELLO_TAR (run build-hello-image.sh)"; exit 1
 fi
@@ -81,6 +81,13 @@ fi
 HERE=$(cd "$(dirname "$0")" && pwd)
 install -m 0644 "$HERE/../config/fstab.default" "$WORK/root/etc/fstab"
 echo "    fstab: etc/fstab (default template)"
+
+# Identify the node OS as Asterinas: kubelet/cadvisor reads /etc/os-release and
+# reports its PRETTY_NAME as the node's "OS Image". ID_LIKE=linux keeps
+# Linux-compatible tooling working. (The "Operating System" field stays "linux"
+# — that is GOOS, load-bearing for pod scheduling.)
+install -m 0644 "$HERE/../config/os-release" "$WORK/root/etc/os-release"
+echo "    os-release: etc/os-release (OS Image → Asterinas)"
 
 echo "==> removing the C runtime (glibc closure) and any dynamic binaries"
 rm -rf "$WORK/root/lib64" "$WORK/root/lib"
@@ -125,8 +132,8 @@ echo "==> initramfs done:"; ls -lh "$CPIO"
 
 if [ "${SKIP_ISO:-0}" != "1" ]; then
   echo "==> rebuilding ISO in the dev container"
-  docker start astrokube >/dev/null 2>&1 || true
-  docker exec astrokube bash -lc \
+  docker start asterkube >/dev/null 2>&1 || true
+  docker exec asterkube bash -lc \
     'git config --global --add safe.directory /root/asterinas; cd /root/asterinas/kernel && cargo osdk build --release --strip-elf --grub-boot-protocol=multiboot2' \
     2>&1 | tail -2
   echo "==> ISO:"; ls -lh target/osdk/aster-kernel-osdk-bin.iso

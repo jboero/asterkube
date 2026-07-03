@@ -2,9 +2,9 @@
 # build-hello-image.sh — build a minimal "from scratch" OCI image whose only
 # content is one static (CGO-free) Go binary that prints and exits, then export
 # it as a docker-archive at /tmp/hello-docker.tar for `ctr image import` in the
-# guest. No libc, no busybox — honours the astrokube no-C/libc constraint.
+# guest. No libc, no busybox — honours the asterkube no-C/libc constraint.
 set -euo pipefail
-REF=${REF:-docker.io/astrokube/hello:latest}
+REF=${REF:-docker.io/asterkube/hello:latest}
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT

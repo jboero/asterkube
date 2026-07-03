@@ -5,7 +5,7 @@ Rust framekernel plus one static, CGO-free Go binary that *is* the real upstream
 kubelet (v1.35.6). Split by where the work lives.
 
 - **Kernel changes** live in the [`asterinas`](https://github.com/jboero/asterinas) fork, branch `asterkube` (~50 commits, ~10k lines across ~160 files).
-- **Go node agent** lives in this repo under [`cmd/astrokube-init/`](../cmd/astrokube-init) (50 commits, ~8.8k lines).
+- **Go node agent** lives in this repo under [`cmd/asterkube-init/`](../cmd/asterkube-init) (50 commits, ~8.8k lines).
 
 ---
 
@@ -47,11 +47,11 @@ kubelet (v1.35.6). Split by where the work lives.
 - `/sys/devices/system/cpu` topology; `/proc/[pid]/mountinfo` real major:minor; `/proc/sys/kernel/osrelease` and the `/proc/sys` knobs ContainerManager reads; `/proc/meminfo` Swap/Buffers/Cached.
 
 ### Platform / boot
-- **ACPI power-button monitor** for graceful node drain; **boot-args cluster join** (`ASTROKUBE_*` kernel cmdline → init env); `run-host-qemu.sh` host harness.
+- **ACPI power-button monitor** for graceful node drain; **boot-args cluster join** (`ASTERKUBE_*` kernel cmdline → init env); `run-host-qemu.sh` host harness.
 
 ---
 
-## Go node agent (`cmd/astrokube-init/`)
+## Go node agent (`cmd/asterkube-init/`)
 
 ### Init / single-binary architecture
 - **kubelet-derived PID 1 node agent** — the real upstream kubelet, fused with our init, running as process 1.
@@ -68,7 +68,7 @@ kubelet (v1.35.6). Split by where the work lives.
 - **containerd + ctr merged** into one multi-call binary (shim kept separate); **static containerd** daemon + image import/run; **pure-Go, CGO-free OCI runtime** (runc replacement); **zero-C image mode** (no glibc/musl/`/lib64`); **CRI** path (sandbox + real container); runtime **joins pod sandbox namespaces**; runtime **read from initramfs** (self-contained, no virtio-fs share).
 
 ### Cluster join & filesystem
-- **Boot-args join** — kubeadm-style bootstrap kubeconfig from the `ASTROKUBE_*` cmdline; apiserver pinned by IP + CA-hash. **CA-bundle install**, in-cluster apiserver hostname resolution, `/etc/fstab` support, kubelet `--root-dir` on the ext2 block device, outbound TCP+TLS gate before join.
+- **Boot-args join** — kubeadm-style bootstrap kubeconfig from the `ASTERKUBE_*` cmdline; apiserver pinned by IP + CA-hash. **CA-bundle install**, in-cluster apiserver hostname resolution, `/etc/fstab` support, kubelet `--root-dir` on the ext2 block device, outbound TCP+TLS gate before join.
 
 ### Verification probes (adversarial, run at boot)
 Each exercises a kernel guarantee end-to-end and fails the boot if it doesn't hold: seccomp enforcement; astromac signal/file/network MAC; tenant adapter (label real pods from spec); user-namespace + capability-boundary + id-mapping; volume-mount hardening; `NETLINK_NETFILTER`; shebang path. Plus datapath probes: Service DNAT (bridged pods, TCP, load-balanced backends), cross-subnet forwarding, pod-egress masquerade, node-originated ClusterIP DNAT, end-to-end Service DNAT via kube-proxy's own rule.

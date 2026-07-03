@@ -1,9 +1,9 @@
-# /etc/fstab — astrokube node filesystem table
+# /etc/fstab — asterkube node filesystem table
 #
 # Format (one mount per line; '#' begins a comment):
 #   <device|source>   <mountpoint>   <fstype>   <options>   <dump>  <pass>
 #
-# The astrokube init (PID 1) reads this AFTER the essential pseudo-filesystems
+# The asterkube init (PID 1) reads this AFTER the essential pseudo-filesystems
 # (/proc, /sys, /dev, /tmp, /run, cgroup2, configfs) are already mounted, then
 # mounts every entry below. A missing device or a failed mount is reported and
 # skipped — never fatal — so it is safe to list disks that aren't attached on

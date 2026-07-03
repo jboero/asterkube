@@ -3,7 +3,7 @@
 **Status: ROOTLESS DONE — secure AND functional, verified in-VM.** Stage 0–1
 (`9ed051af9`) + capability boundary (`cf06bc683`) + uid/gid mapping
 (`00427f5d5`); probes `kubelet ac9bf04`/`68bc863`/`490f5d1`. Tag
-`astrokube-rootless`. Only remaining userns item is `setns(NEWUSER)` (Stage 4),
+`asterkube-rootless`. Only remaining userns item is `setns(NEWUSER)` (Stage 4),
 which joins an existing userns — not needed for rootless containers. 2026-06-29.
 
 > **Stage 2 (id mapping) done:** UserNamespace stores write-once uid_map/gid_map
@@ -125,7 +125,7 @@ you may not join your own/an ancestor and you need the right caps. Update
 `owner_uid()`, `NS_GET_PARENT` (already half-wired in `user_ns.rs`). Boot-test:
 join a peer userns by fd.
 
-## Interaction with astrokube's other work
+## Interaction with asterkube's other work
 
 - **Rootless + astromac**: once Stage 3 lands, a tenant's pods can run with uid 0
   mapped to an unprivileged host uid, *and* be astromac-labeled — defense in

@@ -1,0 +1,16 @@
+# /etc/os-release — identifies the node OS. Kubelet (via cadvisor) reports the
+# PRETTY_NAME below as the node's "OS Image" in `kubectl describe node`.
+#
+# ID_LIKE=linux is deliberate: the node IS Linux-syscall-compatible, so tooling
+# that keys off ID_LIKE keeps working, while the identity reads as Asterinas.
+# NOTE: this does NOT change the node's "Operating System" field — that comes
+# from the Go runtime (GOOS=linux) and must stay "linux" for pod scheduling
+# (the kubernetes.io/os=linux label).
+NAME="Asterinas"
+ID=asterinas
+ID_LIKE=linux
+PRETTY_NAME="Asterinas (asterkube zero-C node)"
+VERSION="rolling"
+VERSION_ID="rolling"
+HOME_URL="https://asterinas.github.io/"
+BUG_REPORT_URL="https://github.com/asterinas/asterinas/issues"

@@ -32,11 +32,11 @@ WARNING: no console will be available to OS
 
 
 ============================================================
- astrokube-init: running as PID 1 on the Asterinas kernel
+ asterkube-init: running as PID 1 on the Asterinas kernel
  Rust kernel + Go init, no C, no libc.
 ============================================================
 
-astrokube-init: mounting filesystems
+asterkube-init: mounting filesystems
   [ ok ] /proc                (proc)
   [ ok ] /sys                 (sysfs)
   [skip] /dev                 (devtmpfs): already populated by kernel
@@ -47,11 +47,11 @@ astrokube-init: mounting filesystems
   [ ok ] /ext2                (ext2)
   [ ok ] /exfat               (exfat)
 
-astrokube-init: kernel capability probe (scoping Kubernetes support)
+asterkube-init: kernel capability probe (scoping Kubernetes support)
   supported filesystems: nodev cgroup2 nodev configfs nodev devpts exfat ext2 nodev overlay nodev pipefs nodev proc nodev ramfs nodev sockfs nodev sysfs nodev tmpfs nodev virtiofs
   cgroup v2 controllers: cpuset cpu memory pids
   cgroup v2 subtree_control: ""
-  cgroup v2 mkdir child: ok (/sys/fs/cgroup/astrokube.probe)
+  cgroup v2 mkdir child: ok (/sys/fs/cgroup/asterkube.probe)
   cgroup v2 enable +memory in subtree_control: ok
   cgroup v2 child interface files: cgroup.controllers cgroup.events cgroup.freeze cgroup.max.depth cgroup.procs cgroup.subtree_control cgroup.threads cpu.stat memory.current memory.events memory.high memory.low memory.max memory.min memory.stat memory.swap.current memory.swap.max
   cgroup v2 write child memory.max=104857600, read back "104857600": ok
@@ -69,19 +69,19 @@ astrokube-init: kernel capability probe (scoping Kubernetes support)
   cgroup memory.max enforcement: ENFORCED — child killed allocating 128MiB under a 32MiB limit (exit status 2)
   cgroup cpu.max enforcement: ENFORCED — throttled to 10%, did 9% of the work of an unthrottled run (3686 vs 36951)
 
-astrokube-init: node agent starting (static-pod mode)
-astrokube-init: starting pod "hello" (mem=128MiB cpu=50%, namespaces=pid,uts,ipc,net,mnt)
+asterkube-init: node agent starting (static-pod mode)
+asterkube-init: starting pod "hello" (mem=128MiB cpu=50%, namespaces=pid,uts,ipc,net,mnt)
   pod[hello] container started: pid=1 hostname="hello-pod"
   pod[hello] isolated loopback: ok (127.0.0.1:32768)
   pod[hello] workload: ok (allocated 8MiB, computed checksum 0xa0)
   pod[hello] container exiting cleanly
-astrokube-init: pod "hello" completed successfully
-astrokube-init: starting pod "web" (mem=64MiB cpu=25%, namespaces=pid,uts,ipc,net,mnt)
+asterkube-init: pod "hello" completed successfully
+asterkube-init: starting pod "web" (mem=64MiB cpu=25%, namespaces=pid,uts,ipc,net,mnt)
   pod[web] container started: pid=1 hostname="web-pod"
   pod[web] isolated loopback: ok (127.0.0.1:32768)
   pod[web] workload: ok (allocated 8MiB, computed checksum 0xa0)
   pod[web] container exiting cleanly
-astrokube-init: pod "web" completed successfully
-astrokube-init: node agent: all pods completed
+asterkube-init: pod "web" completed successfully
+asterkube-init: node agent: all pods completed
 
-astrokube-init: node work complete. Powering off.
+asterkube-init: node work complete. Powering off.

@@ -2,7 +2,7 @@
 # build-containerd-merged.sh — build the merged, static, CGO-free containerd
 # multi-call binary used by the zero-C share.
 #
-# The astrokube node ships three containerd-family programs that are all the SAME
+# The asterkube node ships three containerd-family programs that are all the SAME
 # Go module (github.com/containerd/containerd/v2): the containerd daemon, the ctr
 # CLI, and the runc v2 shim. Linked separately they are three near-identical
 # ~20-65 MB binaries that each bake in their own copy of the Go runtime and the
@@ -24,7 +24,7 @@
 # module to a writable scratch dir and adding our cmd/ package to it — the
 # module's own go.mod/go.sum drive dependency resolution.
 #
-# Usage: astrokube/build-containerd-merged.sh
+# Usage: asterkube/build-containerd-merged.sh
 set -euo pipefail
 
 VERSION=${CONTAINERD_VERSION:-2.2.3}
@@ -41,8 +41,8 @@ trap 'rm -rf "$WORK"' EXIT
 echo "==> staging writable copy of containerd v$VERSION module"
 cp -a "$MODSRC/." "$WORK/"
 chmod -R u+w "$WORK"
-mkdir -p "$WORK/cmd/astrokube-containerd"
-cp "$MAIN" "$WORK/cmd/astrokube-containerd/main.go"
+mkdir -p "$WORK/cmd/asterkube-containerd"
+cp "$MAIN" "$WORK/cmd/asterkube-containerd/main.go"
 
 build_static() { # <out-name> <pkg-path>
   local name=$1 pkg=$2
@@ -58,7 +58,7 @@ build_static() { # <out-name> <pkg-path>
 }
 
 # 1. The merged daemon+ctr binary (our package added to the module copy).
-build_static containerd ./cmd/astrokube-containerd
+build_static containerd ./cmd/asterkube-containerd
 # 2. The shim, still its own binary (upstream's package, unchanged).
 build_static containerd-shim-runc-v2 ./cmd/containerd-shim-runc-v2
 
