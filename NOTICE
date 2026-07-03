@@ -1,0 +1,38 @@
+asterkube
+Copyright 2026 Upbound, Inc.
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+------------------------------------------------------------------------------
+Third-party components
+------------------------------------------------------------------------------
+
+asterkube is a superproject. It builds on two upstream projects, which it
+references as git submodules (by pinned commit) rather than copying their source
+into this tree. Each retains its own license:
+
+  * Asterinas — the framekernel this node runs on.
+      License: Mozilla Public License 2.0 (MPL-2.0), with a small number of
+               files under MIT or "MPL-2.0 OR MIT".
+      Source:  https://github.com/jboero/asterinas  (branch: asterkube)
+      Note:    Our kernel modifications live in that fork and remain MPL-2.0;
+               each modified or added file carries an MPL-2.0 SPDX header.
+
+  * Kubernetes — the kubelet and container/CRI machinery compiled, CGO-free,
+    into the node agent.
+      License: Apache License 2.0
+      Source:  https://github.com/kubernetes/kubernetes  (tag: v1.35.6)
+
+------------------------------------------------------------------------------
+Distributed images
+------------------------------------------------------------------------------
+
+The bootable images produced by this project (ISO / QCOW2) aggregate two
+separately-licensed artifacts: the compiled Asterinas kernel (MPL-2.0) and the
+Apache-2.0 zero-C node binary. This is mere aggregation; each file retains its
+own license. Corresponding source for the MPL-2.0 kernel is available at the
+Asterinas fork referenced above.
+
+Portions of cmd/astrokube-init/ were seeded from Kubernetes source and retain
+"Copyright The Kubernetes Authors" headers under Apache-2.0; modifications and
+new files are Copyright 2026 Upbound, Inc., also under Apache-2.0.

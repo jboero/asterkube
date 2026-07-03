@@ -1,0 +1,17 @@
+<!--
+  Upbound logo — clean SVG rendition for the asterkube README.
+  NOTE: this is a hand-drawn placeholder mark, not the official trademarked
+  asset. Swap in the official logo from Upbound's brand kit before any external
+  publication. Brand teal: #48D0B0.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 56" width="260" height="56" role="img" aria-label="Upbound">
+  <title>Upbound</title>
+  <!-- mark: a rounded badge with an upward "bound" chevron stack -->
+  <rect x="2" y="2" width="52" height="52" rx="14" fill="#48D0B0"/>
+  <g fill="none" stroke="#0B2B26" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="16,34 28,22 40,34"/>
+    <polyline points="16,42 28,30 40,42"/>
+  </g>
+  <!-- wordmark -->
+  <text x="70" y="37" font-family="Inter, Helvetica, Arial, sans-serif" font-size="30" font-weight="700" fill="currentColor">Upbound</text>
+</svg>

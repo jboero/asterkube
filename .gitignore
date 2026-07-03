@@ -1,0 +1,9 @@
+# generated build artifacts
+build/*
+!build/.gitkeep
+
+# transient build intermediates
+/*.log
+
+# kubernetes tree fetched by build-zeroc-kubelet.sh at the pinned tag (v1.35.6)
+/kubernetes/
