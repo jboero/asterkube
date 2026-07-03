@@ -1,0 +1,93 @@
+[2J[01;01H[=3h[2J[01;01H[2J[01;01H[8;042;160t0[2J[01;01H[2J[01;01H[8;056;240t0[2J[01;01H[2J[01;01H[8;042;160t0[2J[01;01H[2J[01;01H[8;056;240t0[2J[01;01HBdsDxe: failed to load Boot0002 "UEFI QEMU NVMe Ctrl nvme0n1 1" from PciRoot(0x0)/Pci(0x4,0x0)/NVMe(0x1,00-00-00-00-00-00-00-00): Not Found
+BdsDxe: loading Boot0003 "UEFI Misc Device" from PciRoot(0x0)/Pci(0x5,0x0)
+BdsDxe: starting Boot0003 "UEFI Misc Device" from PciRoot(0x0)/Pci(0x5,0x0)
+[EFI stub] Loaded with offset 0x68efe000
+[EFI stub] Loading the cmdline
+[EFI stub] Loaded the cmdline: "BOOT_IMAGE=(hd1,gpt1)//kernels/bx5b8afy4544r9av4raqz88ji2zraipl-aster-kernel-osdk-bin init=/bin/busybox PATH=/bin:/nix/var/nix/profiles/system/sw/bin ostd.log_level=error console=hvc0 -- sh /init root=/dev/vda2 init=/nix/var/nix/profiles/system/stage-2-init rd.break=0"
+[EFI stub] Loading the initrd
+[EFI stub] Loaded the initrd: addr=0x7d894000, size=0xbe36cf
+[EFI stub] Found the ACPI RSDP at 0x7fb7e014
+[EFI stub] Found the framebuffer at 0x80000000 with 1280x800 pixels
+[EFI stub] Decoding the kernel payload
+[EFI stub] Loading the payload as an ELF file
+Spawn the first kernel thread
+[kernel] unpacking initramfs.cpio.gz to rootfs ...
+[kernel] rootfs is ready
+                                  ......
+                                .-++++=:
+                               .=+++++=:
+                              :+++++++=:
+                            .-++++++++=.
+                           .=**++==+++=.
+                          :****+-.=+++=.
+                        .=****+: .++++=.
+                       .+****=.  .++++-
+                     .-*****=.   :++++-
+    .::-=============+*****+-----=++++=-:::::::.
+        ..:-*#########*********+++++++=======:.
+              .:+*#####****+++++++++++=====-..
+                 ..-+#******=..  -++++.
+                -+=...:*******=..=++++.
+              .+*+++=. ..=*****+-=++++.
+            .:***+=..     .-+**++++++=.
+           .-***+:          .-+++++++=
+          .*#*=.              .=+++++=
+        .-*#+..                .:=+++-
+       .=#=.                     .=++-
+      :*=.                         ...
+    .:-. Presented by the Asterinas developers
+    .. Released under Mozilla Public License v2.0
+<<< Asterinas NixOS Stage 2 >>>
+booting system configuration /nix/store/agqz4fvk8bakimi4i5n0pdg0xfca0y1i-nixos-system-asterinas-25.05pre-git
+running activation script...
+setting up /etc...
+Executing postBootCommands...
+starting systemd...
+Failed to find module 'autofs4'
+Failed to find module 'unix'
+[  !!  ] This OS version (Asterinas NixOS 25.05 (Warbler)) is past its end-of-support date (2025-12-31)
+[r[H[3Jc
+<<< Welcome to Asterinas NixOS 25.05pre-git (x86_64) - hvc0 >>>
+Run 'nixos-help' for the NixOS manual.
+asterinas login: root (automatic login)
+[?2004h
+[root@asterinas:~]# systemctl --no-pager --failed
+[?2004l  UNIT                         LOAD   ACTIVE SUB    DESCRIPTION                 
+● dhcpcd.service               loaded failed failed DHCP Client
+● firewall.service             loaded failed failed Firewall
+● nscd.service                 loaded failed failed Name Service Cache Daemon (…
+● systemd-journal-catalog-upd… loaded failed failed Rebuild Journal Catalog
+● systemd-journal-flush.servi… loaded failed failed Flush Journal to Persistent…
+● systemd-journald.service     loaded failed failed Journal Service
+● systemd-machine-id-commit.s… loaded failed failed Save Transient machine-id t…
+● systemd-udevd.service        loaded failed failed Rule-based Manager for Devi…
+● systemd-journald-dev-log.so… loaded failed failed Journal Socket (/dev/log)
+● systemd-journald.socket      loaded failed failed Journal Sockets
+● systemd-udevd-control.socket loaded failed failed udev Control Socket
+● systemd-udevd-kernel.socket  loaded failed failed udev Kernel Socket
+Legend: LOAD   → Reflects whether the unit definition was properly loaded.
+        ACTIVE → The high-level unit activation state, i.e. generalization of SUB.
+        SUB    → The low-level unit activation state, values depend on unit type.
+12 loaded units listed.
+[?2004h
+[root@asterinas:~]# systemctl status --no-pager | head -12
+[?2004l● asterinas
+    State: degraded
+    Units: 123 loaded (incl. loaded aliases)
+     Jobs: 0 queued
+   Failed: 12 units
+    Since: Wed 2026-06-10 14:49:39 UTC; 32s ago
+  systemd: 257.5
+  Tainted: support-ended
+   CGroup: /
+           ├─init.scope
+           │ └─1 /run/current-system/systemd/lib/systemd/systemd
+           └─system.slice
+[?2004h
+[root@asterinas:~]# ps -p 1 -o pid,comm
+[?2004l       PID COMMAND
+         1 systemd
+[?2004h
+[root@asterinas:~]# poweroff
+[?2004l[r[H[3Jc[?2004h
+[root@asterinas:~]# 

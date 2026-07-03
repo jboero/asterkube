@@ -1,0 +1,66 @@
+[=3hBdsDxe: loading Boot0002 "UEFI Misc Device" from PciRoot(0x0)/Pci(0x4,0x0)
+BdsDxe: starting Boot0002 "UEFI Misc Device" from PciRoot(0x0)/Pci(0x4,0x0)
+[EFI stub] Loaded with offset 0x68efe000
+[EFI stub] Loading the cmdline
+[EFI stub] Loaded the cmdline: "BOOT_IMAGE=(hd0,gpt1)//kernels/bx5b8afy4544r9av4raqz88ji2zraipl-aster-kernel-osdk-bin init=/bin/busybox PATH=/bin:/nix/var/nix/profiles/system/sw/bin ostd.log_level=error console=hvc0 -- sh /init root=/dev/vda2 init=/nix/var/nix/profiles/system/stage-2-init rd.break=0"
+[EFI stub] Loading the initrd
+[EFI stub] Loaded the initrd: addr=0x7d588000, size=0xbe36cf
+[EFI stub] Found the ACPI RSDP at 0x7fb7e014
+[EFI stub] Found the framebuffer at 0x80000000 with 1280x800 pixels
+[EFI stub] Decoding the kernel payload
+[EFI stub] Loading the payload as an ELF file
+Spawn the first kernel thread
+[kernel] unpacking initramfs.cpio.gz to rootfs ...
+[kernel] rootfs is ready
+                                  ......
+                                .-++++=:
+                               .=+++++=:
+                              :+++++++=:
+                            .-++++++++=.
+                           .=**++==+++=.
+                          :****+-.=+++=.
+                        .=****+: .++++=.
+                       .+****=.  .++++-
+                     .-*****=.   :++++-
+    .::-=============+*****+-----=++++=-:::::::.
+        ..:-*#########*********+++++++=======:.
+              .:+*#####****+++++++++++=====-..
+                 ..-+#******=..  -++++.
+                -+=...:*******=..=++++.
+              .+*+++=. ..=*****+-=++++.
+            .:***+=..     .-+**++++++=.
+           .-***+:          .-+++++++=
+          .*#*=.              .=+++++=
+        .-*#+..                .:=+++-
+       .=#=.                     .=++-
+      :*=.                         ...
+    .:-. Presented by the Asterinas developers
+    .. Released under Mozilla Public License v2.0
+<<< Asterinas NixOS Stage 2 >>>
+booting system configuration /nix/store/mzk933mpmbzgijfyp54x4flr714wij45-nixos-system-asterinas-25.05pre-git
+running activation script...
+setting up /etc...
+Executing postBootCommands...
+starting systemd...
+Failed to find module 'autofs4'
+Failed to find module 'unix'
+[  !!  ] This OS version (Asterinas NixOS 25.05 (Warbler)) is past its end-of-support date (2025-12-31)
+c
+<<< Welcome to Asterinas NixOS 25.05pre-git (x86_64) - hvc0 >>>
+Run 'nixos-help' for the NixOS manual.
+asterinas login: root (automatic login)
+[?2004h
+[root@asterinas:~]# podman run --rm docker.io/library/alpine echo run2 && echo RUN2-OK
+[?2004lrun2
+WARN[0000] write /sys/fs/cgroup/libpod_parent/libpod-0b6f7760e6d7453c24fadc4ab9b034308528df1ab945b784708e07dd8c4b3792/cgroup.freeze: no such file or directory 
+WARN[0000] write /sys/fs/cgroup/libpod_parent/libpod-0b6f7760e6d7453c24fadc4ab9b034308528df1ab945b784708e07dd8c4b3792/cgroup.freeze: no such file or directory 
+RUN2-OK
+[?2004h
+[root@asterinas:~]# docker run --rm docker.io/library/alpine echo docker-cli-ok
+[?2004ldocker-cli-ok
+WARN[0000] write /sys/fs/cgroup/libpod_parent/libpod-8fcda0dfcb6d03751c0ecbaa1ec70e54ec28517befe9773a2599c5bf0ee07fd7/cgroup.freeze: no such file or directory 
+WARN[0000] write /sys/fs/cgroup/libpod_parent/libpod-8fcda0dfcb6d03751c0ecbaa1ec70e54ec28517befe9773a2599c5bf0ee07fd7/cgroup.freeze: no such file or directory 
+[?2004h
+[root@asterinas:~]# poweroff
+[?2004lc[?2004h
+[root@asterinas:~]# 

@@ -1,0 +1,69 @@
+[2J[01;01H[=3h[2J[01;01H[2J[01;01H[8;042;160t0[2J[01;01H[2J[01;01H[8;056;240t0[2J[01;01H[2J[01;01H[8;042;160t0[2J[01;01H[2J[01;01H[8;056;240t0[2J[01;01HBdsDxe: loading Boot0002 "UEFI QEMU DVD-ROM QM00005 " from PciRoot(0x0)/Pci(0x1F,0x2)/Sata(0x2,0xFFFF,0x0)
+BdsDxe: starting Boot0002 "UEFI QEMU DVD-ROM QM00005 " from PciRoot(0x0)/Pci(0x1F,0x2)/Sata(0x2,0xFFFF,0x0)
+Spawn the first kernel thread
+[kernel] unpacking initramfs.cpio.gz to rootfs ...
+[kernel] rootfs is ready
+
+                                  ......
+                                .-++++=:
+                               .=+++++=:
+                              :+++++++=:
+                            .-++++++++=.
+                           .=**++==+++=.
+                          :****+-.=+++=.
+                        .=****+: .++++=.
+                       .+****=.  .++++-
+                     .-*****=.   :++++-
+    .::-=============+*****+-----=++++=-:::::::.
+        ..:-*#########*********+++++++=======:.
+              .:+*#####****+++++++++++=====-..
+                 ..-+#******=..  -++++.
+                -+=...:*******=..=++++.
+              .+*+++=. ..=*****+-=++++.
+            .:***+=..     .-+**++++++=.
+           .-***+:          .-+++++++=
+          .*#*=.              .=+++++=
+        .-*#+..                .:=+++-
+       .=#=.                     .=++-
+      :*=.                         ...
+    .:-. Presented by the Asterinas developers
+    .. Released under Mozilla Public License v2.0
+
+
+============================================================
+ astrokube-init: running as PID 1 on the Asterinas kernel
+ Rust kernel + Go init, no C, no libc.
+============================================================
+
+astrokube-init: mounting filesystems
+  [ ok ] /proc                (proc)
+  [ ok ] /sys                 (sysfs)
+  [skip] /dev                 (devtmpfs): already populated by kernel
+  [ ok ] /tmp                 (tmpfs)
+  [ ok ] /run                 (tmpfs)
+  [ ok ] /sys/fs/cgroup       (cgroup2)
+  [ ok ] /sys/kernel/config   (configfs)
+  [ ok ] /ext2                (ext2)
+  [ ok ] /exfat               (exfat)
+
+astrokube-init: kernel capability probe (scoping Kubernetes support)
+  supported filesystems: nodev cgroup2 nodev configfs nodev devpts exfat ext2 nodev overlay nodev pipefs nodev proc nodev ramfs nodev sockfs nodev sysfs nodev tmpfs nodev virtiofs
+  cgroup v2 controllers: cpuset cpu memory pids
+  cgroup v2 subtree_control: ""
+  cgroup v2 mkdir child: ok (/sys/fs/cgroup/astrokube.probe)
+  cgroup v2 enable +memory in subtree_control: ok
+  cgroup v2 child interface files: cgroup.controllers cgroup.events cgroup.freeze cgroup.max.depth cgroup.procs cgroup.subtree_control cgroup.threads cpu.stat memory.current memory.events memory.high memory.low memory.max memory.min memory.stat memory.swap.current memory.swap.max
+  cgroup v2 write child memory.max=104857600, read back "104857600": ok
+  namespaces present for PID 1: cgroup ipc mnt net pid user uts
+  namespace creation (clone) support:
+    mount (CLONE_NEWNS)        ok (child getpid=4 lo=ok (127.0.0.1:32768))
+    uts (CLONE_NEWUTS)         ok (child getpid=7 lo=ok (127.0.0.1:32769))
+    ipc (CLONE_NEWIPC)         ok (child getpid=10 lo=ok (127.0.0.1:32770))
+    pid (CLONE_NEWPID)         ok (child getpid=1 lo=ok (127.0.0.1:32771))
+    net (CLONE_NEWNET)         ok (child getpid=16 lo=ok (127.0.0.1:32768))
+    user (CLONE_NEWUSER)       UNSUPPORTED (fork/exec /proc/self/exe: invalid argument)
+    cgroup (CLONE_NEWCGROUP)   ok (child getpid=19 lo=ok (127.0.0.1:32772))
+  loopback round-trip (init ns): ok (127.0.0.1:32773)
+  net ns loopback isolation: ISOLATED — new netns bound 127.0.0.1:54321 while initial ns held it
+
+astrokube-init: milestone 1 complete (filesystems mounted). Powering off.

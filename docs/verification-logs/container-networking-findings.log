@@ -1,0 +1,76 @@
+[=3hBdsDxe: loading Boot0002 "UEFI Misc Device" from PciRoot(0x0)/Pci(0x4,0x0)
+BdsDxe: starting Boot0002 "UEFI Misc Device" from PciRoot(0x0)/Pci(0x4,0x0)
+[EFI stub] Loaded with offset 0x68efe000
+[EFI stub] Loading the cmdline
+[EFI stub] Loaded the cmdline: "BOOT_IMAGE=(hd0,gpt1)//kernels/bx5b8afy4544r9av4raqz88ji2zraipl-aster-kernel-osdk-bin init=/bin/busybox PATH=/bin:/nix/var/nix/profiles/system/sw/bin ostd.log_level=error console=hvc0 -- sh /init root=/dev/vda2 init=/nix/var/nix/profiles/system/stage-2-init rd.break=0"
+[EFI stub] Loading the initrd
+[EFI stub] Loaded the initrd: addr=0x7d588000, size=0xbe36cf
+[EFI stub] Found the ACPI RSDP at 0x7fb7e014
+[EFI stub] Found the framebuffer at 0x80000000 with 1280x800 pixels
+[EFI stub] Decoding the kernel payload
+[EFI stub] Loading the payload as an ELF file
+Spawn the first kernel thread
+[kernel] unpacking initramfs.cpio.gz to rootfs ...
+[kernel] rootfs is ready
+                                  ......
+                                .-++++=:
+                               .=+++++=:
+                              :+++++++=:
+                            .-++++++++=.
+                           .=**++==+++=.
+                          :****+-.=+++=.
+                        .=****+: .++++=.
+                       .+****=.  .++++-
+                     .-*****=.   :++++-
+    .::-=============+*****+-----=++++=-:::::::.
+        ..:-*#########*********+++++++=======:.
+              .:+*#####****+++++++++++=====-..
+                 ..-+#******=..  -++++.
+                -+=...:*******=..=++++.
+              .+*+++=. ..=*****+-=++++.
+            .:***+=..     .-+**++++++=.
+           .-***+:          .-+++++++=
+          .*#*=.              .=+++++=
+        .-*#+..                .:=+++-
+       .=#=.                     .=++-
+      :*=.                         ...
+    .:-. Presented by the Asterinas developers
+    .. Released under Mozilla Public License v2.0
+<<< Asterinas NixOS Stage 2 >>>
+booting system configuration /nix/store/mzk933mpmbzgijfyp54x4flr714wij45-nixos-system-asterinas-25.05pre-git
+running activation script...
+setting up /etc...
+Executing postBootCommands...
+starting systemd...
+Failed to find module 'autofs4'
+Failed to find module 'unix'
+[  !!  ] This OS version (Asterinas NixOS 25.05 (Warbler)) is past its end-of-support date (2025-12-31)
+c
+<<< Welcome to Asterinas NixOS 25.05pre-git (x86_64) - hvc0 >>>
+Run 'nixos-help' for the NixOS manual.
+asterinas login: root (automatic login)
+[?2004h
+[root@asterinas:~]# echo GUEST-NETNS=$(readlink /proc/self/ns/net)
+[?2004lGUEST-NETNS=net:[7]
+[?2004h
+[root@asterinas:~]# podman run --rm --network host docker.io/library/alpine sh -c "echo CTR-NETNS=\$(readlink /proc/self/ns/net); ip -o addr 2>/dev/null | head -3"
+[?2004lCTR-NETNS=net:[7]
+1: lo    inet 127.0.0.1/8 scope host lo
+2: eth0    inet 10.0.2.15/24 scope host eth0
+WARN[0000] write /sys/fs/cgroup/libpod_parent/libpod-a2cc7f75dee2d2d8ebe5e9f097de0571e40e88e250ac0526c1a9996f6f338af1/cgroup.freeze: no such file or directory 
+WARN[0000] write /sys/fs/cgroup/libpod_parent/libpod-a2cc7f75dee2d2d8ebe5e9f097de0571e40e88e250ac0526c1a9996f6f338af1/cgroup.freeze: no such file or directory 
+[?2004h
+[root@asterinas:~]# podman run --rm --network host docker.io/library/alpine sh -c "wget -T 5 -qO- http://10.0.2.2:9999 2>&1 | head -2; echo CONNECT-TEST-DONE"
+[?2004lwget: can't connect to remote host (10.0.2.2): Connection refused
+CONNECT-TEST-DONE
+WARN[0000] write /sys/fs/cgroup/libpod_parent/libpod-2c81e1603d9b34b8cef95c98c82a6aa179b17136ee1f0437e4db8de7692003a3/cgroup.freeze: no such file or directory 
+WARN[0000] write /sys/fs/cgroup/libpod_parent/libpod-2c81e1603d9b34b8cef95c98c82a6aa179b17136ee1f0437e4db8de7692003a3/cgroup.freeze: no such file or directory 
+[?2004h
+[root@asterinas:~]# podman run --rm --network host --security-opt seccomp=unconfined docker.io/library/alpine sh -c "wget -qO- -T 8 http://1.1.1.1 >/dev/null 2>&1 && echo SECCOMP-WAS-THE-ISSUE || echo NOT-SECCOMP"
+[?2004lNOT-SECCOMP
+WARN[0000] write /sys/fs/cgroup/libpod_parent/libpod-2475ab308f2cc04caa9e81165efa782bd12dd5e7ec228cc24cc9ad63f4747bfe/cgroup.freeze: no such file or directory 
+WARN[0000] write /sys/fs/cgroup/libpod_parent/libpod-2475ab308f2cc04caa9e81165efa782bd12dd5e7ec228cc24cc9ad63f4747bfe/cgroup.freeze: no such file or directory 
+[?2004h
+[root@asterinas:~]# poweroff
+[?2004lc[?2004h
+[root@asterinas:~]# 

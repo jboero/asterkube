@@ -1,0 +1,57 @@
+# /etc/fstab — astrokube node filesystem table
+#
+# Format (one mount per line; '#' begins a comment):
+#   <device|source>   <mountpoint>   <fstype>   <options>   <dump>  <pass>
+#
+# The astrokube init (PID 1) reads this AFTER the essential pseudo-filesystems
+# (/proc, /sys, /dev, /tmp, /run, cgroup2, configfs) are already mounted, then
+# mounts every entry below. A missing device or a failed mount is reported and
+# skipped — never fatal — so it is safe to list disks that aren't attached on
+# every boot (that is the effect of `nofail`). Add `noauto` to an entry to
+# define it here but NOT mount it at boot. The <dump> and <pass> columns are
+# accepted and ignored (there is no fsck/dump on this node).
+#
+# ----------------------------------------------------------------------------
+# Filesystems Asterinas currently supports (valid <fstype> values):
+#
+#   block-backed : ext2, exfat
+#                  (No journaling. "ext4" resolves to the ext2 driver — it will
+#                   mount a clean ext4 image but WITHOUT journal or extents
+#                   support. No btrfs / xfs yet.)
+#   in-memory    : tmpfs, ramfs
+#   overlay      : overlay        (overlayfs — e.g. a container rootfs)
+#   host share   : virtiofs       (a virtio-fs share exported by the hypervisor)
+#   pseudo       : proc, sysfs, devtmpfs, cgroup2, configfs, devpts
+#
+# Block devices are virtio-blk or NVMe. Whole disks are named vda, vdb, … ;
+# partitions are vda1, vda2, … (Asterinas parses MBR, GPT, and extended/logical
+# partitions). Only virtio-net/virtio-blk/NVMe are supported — there are no
+# SATA/AHCI/IDE drivers, so attach storage as virtio-blk or NVMe.
+#
+# Common options: ro, rw, nosuid, nodev, noexec, noatime, sync, nofail, noauto.
+# Security tip: for any volume that may hold untrusted content, prefer
+# `nosuid,nodev,noexec` — the kernel ENFORCES these (a setuid binary on a nosuid
+# mount cannot escalate; a noexec mount refuses to exec; a nodev mount refuses
+# device nodes).
+# ----------------------------------------------------------------------------
+#
+# ---- active: whole-disk data filesystems (skipped if the disk isn't attached) ----
+/dev/vda    /ext2     ext2      nofail                          0 0
+/dev/vdb    /exfat    exfat     nofail                          0 0
+#
+# ---- examples: uncomment and edit as needed ----
+#
+# A GPT/MBR partition holding an ext2 data volume, hardened:
+#/dev/vdc1   /mnt/data     ext2      nofail,nosuid,nodev             0 0
+#
+# A RAM-backed scratch area capped at 512 MiB:
+#tmpfs       /mnt/scratch  tmpfs     size=512m,nosuid,nodev,noexec   0 0
+#
+# A virtio-fs share the host exported with tag "myshare":
+#myshare     /mnt/host     virtiofs  nofail                          0 0
+#
+# A read-only exfat data/removable disk, hardened:
+#/dev/vdd    /mnt/usb      exfat     ro,nofail,nosuid,nodev,noexec   0 0
+#
+# Defined but NOT auto-mounted (mount it later by hand):
+#/dev/vde    /mnt/cold     ext2      noauto                          0 0
