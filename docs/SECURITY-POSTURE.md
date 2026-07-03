@@ -40,13 +40,13 @@ framekernel-native isolation model for the deep tenancy boundary over time.
   Yama-style framework, NOT an SELinux port. **Three domains:**
   - *signals* (`kill`): `asterinas 624f225e1`, `kubelet 2edbfed`.
   - *file access* (inode `check_permission`, `(dev,ino)` object labels via
-    `PR_ASTROKUBE_LABEL_FD`): `asterinas 2aec30b34`, `kubelet 1dd9e80`.
-  - *network* (`connect`, IPv4 object labels via `PR_ASTROKUBE_LABEL_IP`):
+    `PR_ASTERKUBE_LABEL_FD`): `asterinas 2aec30b34`, `kubelet 1dd9e80`.
+  - *network* (`connect`, IPv4 object labels via `PR_ASTERKUBE_LABEL_IP`):
     `asterinas 69174eb64`, `kubelet 0fc2115`.
   Verified for all three: enforcing cross-tenant → EPERM, same-tenant/unconfined
   allowed, permissive logs; unlabeled (tenant 0 = all of k8s) untouched.
 - ✅ **Tenant adapter** — the node agent maps a pod's `tenant` spec field into
-  kernel labels (`PR_ASTROKUBE_SETTENANT` on the pod + `LABEL_IP` on its IP +
+  kernel labels (`PR_ASTERKUBE_SETTENANT` on the pod + `LABEL_IP` on its IP +
   enforcing), demonstrated with two real pods where tn1 is denied connecting to
   tn2. `kubelet 5990501`. This is where a launcher would map a
   namespace/seLinuxOptions/annotation onto astromac.

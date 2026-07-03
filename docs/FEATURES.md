@@ -25,7 +25,7 @@ kubelet (v1.35.6). Split by where the work lives.
   - **Signal** — deny cross-tenant `kill`/signals (checked before DAC).
   - **File** — deny cross-tenant read/write/exec via an in-kernel `(dev, ino)`→tenant table, hooked into `check_permission`.
   - **Network** — deny cross-tenant IPv4 `connect()` via an IP→tenant table.
-  - Control: `PR_ASTROKUBE_SETTENANT`, `PR_ASTROKUBE_MAC_MODE`, `PR_ASTROKUBE_LABEL_FD`, `PR_ASTROKUBE_LABEL_IP`.
+  - Control: `PR_ASTERKUBE_SETTENANT`, `PR_ASTERKUBE_MAC_MODE`, `PR_ASTERKUBE_LABEL_FD`, `PR_ASTERKUBE_LABEL_IP`.
   - New LSM hook points: `signal_access`, `file_access`, `socket_connect`.
 - **Mount-flag hardening** — `nosuid` / `noexec` / `nodev` enforced on exec/access, closing volume-based privilege escalation.
 

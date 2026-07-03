@@ -296,7 +296,7 @@ installs and reads back its default route.
 ## 10. Service (ClusterIP) NAT — kube-proxy's data plane ✅
 
 `kernel/libs/aster-bigtcp/src/nat.rs` (new), hooked into the bridge forward path;
-control via a temporary `prctl` (`PR_ASTROKUBE_DNAT`, `CAP_NET_ADMIN`-gated) until
+control via a temporary `prctl` (`PR_ASTERKUBE_DNAT`, `CAP_NET_ADMIN`-gated) until
 the `nftables`-compatible netlink surface exists.
 
 A global NAT table rewrites a VIP `vip:vport/proto` to a backend on the way in
@@ -339,7 +339,7 @@ and back, across subnets, while the single-bridge Service paths keep passing.
 ## 12. Masquerade (source NAT) — pod egress through the host ✅
 
 `kernel/libs/aster-bigtcp/src/nat.rs` (masquerade table + reverse), `net/iface/
-bridge.rs` (uplink set + SNAT in the router), `prctl.rs` (`PR_ASTROKUBE_MASQ`).
+bridge.rs` (uplink set + SNAT in the router), `prctl.rs` (`PR_ASTERKUBE_MASQ`).
 
 Before: a pod could reach other pods (even on other subnets, via §11) but not a
 network the cluster does not own — the router dropped such frames at the local
@@ -429,7 +429,7 @@ the reply returns to the pod.
      §12's SNAT engine already does the translation. slirp makes real internet
      egress in the test VM unreliable regardless.
    - **`nftables`-compatible `NETLINK_NETFILTER`** surface, to replace the
-     temporary `PR_ASTROKUBE_DNAT` `prctl` so real `kube-proxy`/`nft` program the
+     temporary `PR_ASTERKUBE_DNAT` `prctl` so real `kube-proxy`/`nft` program the
      §10 engine unmodified.
    - **VXLAN overlay** (multi-node pod networking); `IFLA_NET_NS_FD`,
      `RTM_SETLINK`, per-ns kernel netlink sockets.
