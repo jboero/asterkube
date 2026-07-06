@@ -45,7 +45,16 @@ fi
 
 echo "==> extracting staged initramfs $CPIO"
 mkdir -p "$WORK/root"
-( cd "$WORK/root" && gzip -dc "$OLDPWD/$CPIO" | cpio -idm --quiet )
+# Format-agnostic decompress: the staged initramfs may be gzip (the OSDK default)
+# or zstd (what we repack to below). Detect by magic bytes.
+decompress_cpio() {  # $1 = compressed cpio
+  case "$(head -c2 "$1" | od -An -tx1 | tr -d ' ')" in
+    1f8b) gzip -dc "$1" ;;              # gzip
+    28b5) zstd -dc --long=27 "$1" ;;    # zstd
+    *)    cat "$1" ;;                   # raw cpio
+  esac
+}
+( cd "$WORK/root" && decompress_cpio "$OLDPWD/$CPIO" | cpio -idm --quiet )
 
 # /sbin/init -> ../usr/bin/kubelet, so the init binary lives there. We ship ONE
 # binary (no duplicate): `kubelet` is our static, CGO-free init/node-agent, and
@@ -125,9 +134,13 @@ while IFS= read -r -d '' f; do
   printf "    %-28s %s\n" "${f#$WORK/root/}" "$(file -b "$f" | grep -oE 'statically linked')"
 done < <(find "$WORK/root" -type f -print0)
 
-echo "==> repacking $CPIO"
+echo "==> repacking $CPIO (zstd --ultra -22, the kernel unpacks gzip or zstd by magic)"
+# Max zstd: level 22 + a 128MB long-distance window. --no-check omits the content
+# checksum (the kernel's ruzstd is built without the hash feature). ~40% smaller
+# than gzip -9 on this image; boot time is ~neutral (cpio unpack dominates).
 ( cd "$WORK/root" && find . -print0 \
-    | cpio --null -o -H newc --owner=0:0 --quiet | gzip -9 ) > "$CPIO"
+    | cpio --null -o -H newc --owner=0:0 --quiet \
+    | zstd -q -T0 --ultra -22 --no-check --long=27 ) > "$CPIO"
 echo "==> initramfs done:"; ls -lh "$CPIO"
 
 if [ "${SKIP_ISO:-0}" != "1" ]; then
