@@ -68,6 +68,16 @@ const (
 	envInsecure   = "ASTERKUBE_INSECURE"
 )
 
+// asterkubeNodeLabels advertises the node's true kernel identity as custom node
+// labels, WITHOUT touching the well-known kubernetes.io/os label. That label
+// stays "linux" — the syscall-ABI personality that keeps pod scheduling, system
+// DaemonSets, and OCI image platform matching working (Asterinas runs the Linux
+// ABI, so "linux" there is functional, not a brand claim). The kernel's real
+// identity rides on a separate, custom domain so nothing in the ecosystem that
+// selects kubernetes.io/os=linux breaks. The kernel.asterinas.io/ prefix is a
+// non-k8s namespace, so NodeRestriction lets a self-registering kubelet set it.
+const asterkubeNodeLabels = "kernel.asterinas.io/name=asterinas,kernel.asterinas.io/compat=linux"
+
 // bootArgsConfigured reports whether the kernel cmdline asked this node to join a
 // cluster (ASTERKUBE_APISERVER is set).
 func bootArgsConfigured() bool {
@@ -133,6 +143,7 @@ func bootArgsJoin() {
 		"--hostname-override=" + node,
 		"--node-ip=" + nodeIP,
 		"--register-node=true",
+		"--node-labels=" + asterkubeNodeLabels, // kernel identity; kubernetes.io/os stays "linux"
 		"--cgroup-driver=cgroupfs", "--cgroups-per-qos=false", "--enforce-node-allocatable=",
 		"--cgroup-root=/", "--runtime-cgroups=/", "--kubelet-cgroups=/",
 		"--fail-swap-on=false",

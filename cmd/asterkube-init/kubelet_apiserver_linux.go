@@ -98,6 +98,7 @@ func apiserverPhase(kubeletBin, sock, kubeconfig string, env []string) {
 		// The node's address as seen by the apiserver (the slirp guest IP).
 		"--node-ip=10.0.2.15",
 		"--register-node=true",
+		"--node-labels=" + asterkubeNodeLabels, // kernel identity; kubernetes.io/os stays "linux"
 		// Keep our experimental node out of the scheduler's default pool until
 		// networking (Layer 3b) is ready, so cluster workloads don't land on a
 		// NotReady node. DaemonSets with broad tolerations may still target it.
