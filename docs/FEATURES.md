@@ -77,9 +77,42 @@ Each exercises a kernel guarantee end-to-end and fails the boot if it doesn't ho
 
 ## Image
 
-- **Stripped kernel ELF: ~5.3M** (down from a 144M debug build).
-- **ISO: 59M · QCOW2: 56M** — the shippable, self-contained images.
-- The bulk is the **44M gzipped initramfs**, carrying the ~80M static Go binary (kubelet + init + runc + DHCP) plus containerd/ctr/shim and a demo image — so nothing is fetched at boot.
+The whole node — memory-safe Rust kernel + one static, CGO-free Go binary — with
+**zero C** (no glibc/musl, no `/lib64`), self-contained so nothing is fetched at boot.
+
+```
+astrokube node image
+├─ boot artifacts (zstd-compressed initramfs)
+│  ├─ kernel ELF (release, stripped) ........  5.3 MiB
+│  ├─ initramfs.cpio.zst  (zstd --ultra -22) . 26.4 MiB   ← 44 MiB gzip  (−40%)
+│  ├─ ISO  (bootable, isohybrid) ............. 40.6 MiB   ← 58 MiB gzip  (−31%)
+│  └─ QCOW2 (disk image) ..................... 38.2 MiB   ← 56 MiB gzip  (−32%)
+│
+└─ initramfs contents  (138 MiB uncompressed → 26.4 MiB zstd)
+   ├─ sbin/init → ../usr/bin/kubelet ......... symlink
+   ├─ usr/bin/
+   │  ├─ kubelet ............................. 79.1 MiB   THE binary: real upstream kubelet
+   │  │                                                   + init (PID 1) + pure-Go runc
+   │  │                                                   + mount applet + DHCP client
+   │  ├─ containerd ......................... 42.7 MiB   static, merged containerd+ctr
+   │  ├─ containerd-shim-runc-v2 ............ 13.9 MiB   static
+   │  └─ ctr → containerd ................... symlink
+   ├─ usr/lib64/ ............................ empty  (proof: no C runtime)
+   ├─ usr/share/asterkube/hello.tar ......... 1.5 MiB   demo image
+   ├─ etc/os-release ........................ 742 B    identifies as Asterinas
+   ├─ etc/fstab ............................. 3.0 KiB  documented default mounts
+   └─ etc/astrokube/pods/*.json ............. ~2.3 KiB pod specs (7 files)
+```
+
+| Artifact | gzip -9 | **zstd --ultra -22 --long** | saving |
+|---|---|---|---|
+| initramfs | 44 MiB | **26.4 MiB** | −40% |
+| ISO | 58 MiB | **40.6 MiB** | −31% |
+| QCOW2 | 56 MiB | **38.2 MiB** | −32% |
+
+The kernel decompresses either format (magic-byte detected), so the compressor is a
+free choice; zstd is a pure size win — boot time is unchanged (the 138 MiB cpio
+unpack into the in-memory rootfs dominates, not decompression).
 
 ---
 
