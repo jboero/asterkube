@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/upbound-logo.svg" alt="Upbound" height="52">
+  <img src="assets/upbound-logo.png" alt="Upbound" height="64">
 </p>
 
-<h1 align="center">asterkube</h1>
+<h1 align="center">Asterkube</h1>
 
 <p align="center">
   <b>Secure Kubernetes without Linux or C.</b><br>

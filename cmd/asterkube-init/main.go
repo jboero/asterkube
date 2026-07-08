@@ -288,11 +288,14 @@ func runAsInit() {
 		bootArgsJoin()
 	}
 
-	// If the node came up live (containerd + the apiserver kubelet are running),
-	// keep it running as a persistent, interactive cluster member until an ACPI
-	// shutdown arrives. Otherwise the capability demos are done — power off.
+	// Keep the node running as a persistent, interactive member until an ACPI
+	// shutdown arrives when EITHER it came up live (containerd + the apiserver
+	// kubelet are running) OR ASTERKUBE_PERSIST is set — the latter guarantees a
+	// downloadable sample image stays up for the user to explore, even if the
+	// capability demos didn't leave a long-running process behind. Only a plain,
+	// non-persistent demo boot powers off after the checks.
 	fmt.Println()
-	if nodeIsLive() {
+	if nodeIsLive() || os.Getenv("ASTERKUBE_PERSIST") != "" {
 		serveForever()
 	} else {
 		fmt.Println("asterkube-init: node did not come up live; powering off.")
