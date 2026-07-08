@@ -150,28 +150,41 @@ ABI, so "linux" there is a functional compatibility declaration (like gVisor or 
 linuxulator), not a brand claim. Changing that well-known label would break pod scheduling
 and OCI image matching across the ecosystem. It's *Linux-compatible*, not Linux.
 
-## Build
+## Try it now (no build)
 
-Prerequisites: Docker (the Asterinas OSDK build container, named `asterkube`), Go,
-`qemu-system-x86_64`, `zstd`, and the usual initramfs tooling (`cpio`, `readelf`).
+Grab a [release](https://github.com/upbound/asterkube/releases) image and boot it —
+you only need `qemu-system-x86_64`, UEFI firmware (`edk2-ovmf` / `ovmf`), and KVM:
 
 ```bash
-git clone --recursive https://github.com/upbound/asterkube
-cd asterkube
-# shallow submodule if you don't want the full kernel history:
-#   git clone https://github.com/upbound/asterkube && cd asterkube
-#   git submodule update --init --depth 1
+gh release download asterkube-v0.1 --repo upbound/asterkube && sha256sum -c SHA256SUMS
+curl -sO https://raw.githubusercontent.com/upbound/asterkube/main/scripts/run-release.sh
+chmod +x run-release.sh && ./run-release.sh asterkube-node-v0.1.iso     # or the .qcow2
+```
+
+It boots in a few seconds and **stays live** until you shut it down — `Ctrl-a c` then
+`system_powerdown` in the QEMU monitor. Full walkthrough in **[QUICKSTART.md](QUICKSTART.md)**.
+
+## Build from source
+
+Prerequisites: Docker, Go, `qemu-system-x86_64` + OVMF, `zstd`, and initramfs tooling
+(`cpio`, `readelf`). The build container carries the Rust + OSDK toolchain.
+
+```bash
+git clone --recursive https://github.com/upbound/asterkube && cd asterkube
+
+# create the Asterinas OSDK build container (name MUST be 'asterkube') + install cargo-osdk
+docker run -d --name asterkube --privileged --network=host -v /dev:/dev \
+    -v "$PWD/asterinas:/root/asterinas" -w /root/asterinas \
+    asterinas/asterinas:0.18.0-20260603 sleep infinity
+docker exec asterkube bash -lc 'OSDK_LOCAL_DEV=1 cargo install cargo-osdk --path osdk'
 
 scripts/build-containerd-merged.sh                 # static containerd+ctr → build/static-bins
+scripts/build-hello-image.sh                       # demo image (needs buildah/skopeo)
 scripts/build-zeroc-kubelet.sh                     # combined CGO-free kubelet (fetches k8s v1.35.6)
 INIT_BIN=build/asterkube-kubelet scripts/zero-c-initramfs.sh   # zero-C initramfs + bootable ISO
 scripts/build-qcow2.sh                             # (optional) convert the ISO to a QCOW2 disk
-```
 
-## Run
-
-```bash
-asterinas/run-host-qemu.sh asterkube               # boot the ISO under QEMU (slirp NIC)
+scripts/run-release.sh asterinas/target/osdk/aster-kernel-osdk-bin.iso   # boot what you built
 ```
 
 To **join a cluster**, generate boot args (this writes a short-lived bootstrap token to
