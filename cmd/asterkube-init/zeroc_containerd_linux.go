@@ -100,7 +100,15 @@ func zeroCContainerdTest() {
 		fmt.Printf("asterkube-init: FAILED to start static containerd: %v\n", err)
 		return
 	}
+	// ASTERKUBE_PERSIST keeps the static containerd daemon running after the demo
+	// so the node stays LIVE (main's nodeIsLive -> serveForever) and an operator
+	// can attach and drive `ctr`. Without it, the daemon is torn down and the
+	// self-contained image powers off after the capability demos, as before.
+	persist := os.Getenv("ASTERKUBE_PERSIST") != ""
 	defer func() {
+		if persist {
+			return // leave containerd running; the node persists via serveForever
+		}
 		_ = daemon.Process.Kill()
 		_, _ = daemon.Process.Wait()
 	}()
@@ -135,6 +143,10 @@ func zeroCContainerdTest() {
 
 	// Import + run a container; the shim spawns our pure-Go runc to do it.
 	ctrImportAndRun(ctr, sock, env, logPath, zeroCImageTar)
+	if persist {
+		keepAlive(daemon)
+		fmt.Println("asterkube-init: static containerd kept alive — node will stay LIVE (ASTERKUBE_PERSIST)")
+	}
 	fmt.Println("asterkube-init: ===== end zero-C containerd path =====")
 }
 
