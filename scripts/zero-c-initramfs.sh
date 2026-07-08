@@ -85,6 +85,21 @@ else
   echo "    !! missing hello image $HELLO_TAR (run build-hello-image.sh)"; exit 1
 fi
 
+# Bake the static, CGO-free CNI plugins so a joined node reaches NetworkReady
+# (the init's setupCNI installs these into /opt/cni/bin + writes the conflist).
+# Fetch them with scripts/fetch-cni-plugins.sh (or point CNI_DIR at a dir of
+# ptp/portmap/host-local/loopback static binaries).
+CNI_DIR=${CNI_DIR:-$(cd "$(dirname "$0")/.." && pwd)/build/cni}
+if [ -d "$CNI_DIR" ] && ls "$CNI_DIR"/ptp >/dev/null 2>&1; then
+  mkdir -p "$WORK/root/usr/share/asterkube/cni"
+  for p in ptp portmap host-local loopback; do
+    [ -f "$CNI_DIR/$p" ] && install -m 0755 "$CNI_DIR/$p" "$WORK/root/usr/share/asterkube/cni/$p"
+  done
+  echo "    cni: $(ls "$WORK/root/usr/share/asterkube/cni" | tr '\n' ' ')(→ node reaches Ready on join)"
+else
+  echo "    !! no CNI plugins in $CNI_DIR — a joined node will stay NotReady (run fetch-cni-plugins.sh)"
+fi
+
 # Ship the documented default /etc/fstab (operator-editable table of extra
 # mounts; the init reads it after the essential pseudo-filesystems).
 HERE=$(cd "$(dirname "$0")" && pwd)

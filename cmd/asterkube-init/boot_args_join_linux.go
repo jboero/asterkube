@@ -114,6 +114,12 @@ func bootArgsJoin() {
 		return
 	}
 
+	// 2b. Install a minimal CNI (the ptp+portmap conflist plus the static,
+	//     CGO-free plugin binaries baked into the image) BEFORE containerd starts,
+	//     so its CRI loads the network config and reports NetworkReady — the
+	//     prerequisite for the node to reach Ready, not just Registered.
+	setupCNI("/usr/share/asterkube/cni")
+
 	// 3. Bring up the baked-in static containerd (persistent: the node keeps it).
 	linkRunc()
 	env := append(os.Environ(), "PATH=/usr/bin:/bin", "XDG_RUNTIME_DIR=/run")
@@ -193,7 +199,8 @@ func bootArgsJoin() {
 		return
 	}
 	fmt.Printf("asterkube-init: BOOT-ARGS JOIN PASSED — node %q registered with the apiserver ✓\n", node)
-	fmt.Println("asterkube-init: (Ready awaits a CNI; that is the next gap, not a join failure.)")
+	fmt.Println("asterkube-init: CNI installed (ptp+portmap); the node reports Ready once")
+	fmt.Println("asterkube-init: containerd's CRI confirms NetworkReady — check `kubectl get nodes`.")
 
 	// 6. Keep containerd + kubelet running so the node persists (serveForever).
 	keepAlive(cd)

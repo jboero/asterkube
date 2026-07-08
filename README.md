@@ -195,16 +195,22 @@ scripts/asterkube-boot-args.sh -n my-node          # prints ASTERKUBE_* lines
 # paste them into asterinas/OSDK.toml [run.boot] kcmd_args, then re-run zero-c-initramfs.sh
 ```
 
-The node then registers in `kubectl get nodes` — `NotReady` until a CNI is added (see below).
+The image bundles a minimal CNI (ptp + portmap), so a node that registers reaches
+**Ready**. Cluster registration over the demo slirp NIC is still experimental (the
+in-VM TLS-bootstrap CSR is unreliable over that path); the proven route issues the
+node's client cert on the host with `scripts/make-node-kubeconfig.sh` and stages the
+resulting kubeconfig into the image.
 
 ## Limitations
 
 This is a proof of concept, not a product:
 
 - **Not production-ready** — largely AI-authored; Asterinas maintainers gate anything upstream.
+- **Cluster join is experimental** — CNI is bundled (node goes Ready once registered), but
+  reliable registration currently needs a host-issued node kubeconfig (`make-node-kubeconfig.sh`),
+  not the in-VM token bootstrap, over the demo NIC.
 - **astromac ships Permissive** (log-only) — armed but not blocking until set to Enforcing.
 - **NAT is a minimal datapath** — small global conntrack, no endpoint removal; not full Service semantics.
-- **No CNI** in the self-contained image — a joined node stays `NotReady` until one is added.
 - **Kernel gaps** — virtio devices only (no other NIC/driver classes, no GPU), no journaled
   filesystem (ext4/btrfs) or aarch64 yet. Fine for virtio-backed VM workloads; not bare metal.
 - **GRUB2** remains the one C component in the boot path.
