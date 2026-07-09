@@ -187,28 +187,41 @@ scripts/build-qcow2.sh                             # (optional) convert the ISO 
 scripts/run-release.sh asterinas/target/osdk/aster-kernel-osdk-bin.iso   # boot what you built
 ```
 
-To **join a cluster**, generate boot args (this writes a short-lived bootstrap token to
-*your* cluster), add them to the kernel cmdline, and rebuild:
+To **join a cluster**, mint a "join bundle" for *your* cluster and attach it to the VM as a
+small config disk — the cloud-init/Ignition model. The bundle carries a node client cert
+issued host-side through the cluster's CSR API (the CA key never leaves the cluster), so the
+node registers directly with its issued cert — no in-VM TLS-bootstrap CSR:
 
 ```bash
-scripts/asterkube-boot-args.sh -n my-node          # prints ASTERKUBE_* lines
-# paste them into asterinas/OSDK.toml [run.boot] kcmd_args, then re-run zero-c-initramfs.sh
+# On a box with kubectl admin access to the target cluster:
+scripts/asterkube-join.sh -n asterkube -s <apiserver-ip:port>   # writes asterkube-join.img
+
+# Boot the released image with the bundle attached as a virtio-blk disk:
+qemu-system-x86_64 ... \
+  -drive if=none,format=raw,id=join,file=asterkube-join.img \
+  -device virtio-blk-pci,drive=join,serial=asterkubecfg
+
+kubectl get nodes    # asterkube ... Ready
 ```
 
-The image bundles a minimal CNI (ptp + portmap), so a node that registers reaches
-**Ready**. Cluster registration over the demo slirp NIC is still experimental (the
-in-VM TLS-bootstrap CSR is unreliable over that path); the proven route issues the
-node's client cert on the host with `scripts/make-node-kubeconfig.sh` and stages the
-resulting kubeconfig into the image.
+The node mounts the bundle, installs the bundled CNI (ptp + portmap), and brings up the real
+kubelet. **Verified:** the zero-C Asterinas node registers and reaches `Ready=True`
+(`OSImage=Asterinas`, `kubernetes.io/os=linux`), carrying an `asterkube.io/experimental`
+`NoSchedule` taint so cluster workloads don't land on it unless you tolerate it.
+
+(A kernel-cmdline token bootstrap also exists — `scripts/asterkube-boot-args.sh` — but the
+in-VM CSR is unreliable over the demo slirp NIC; the config-disk bundle above is the
+recommended, verified path.)
 
 ## Limitations
 
 This is a proof of concept, not a product:
 
 - **Not production-ready** — largely AI-authored; Asterinas maintainers gate anything upstream.
-- **Cluster join is experimental** — CNI is bundled (node goes Ready once registered), but
-  reliable registration currently needs a host-issued node kubeconfig (`make-node-kubeconfig.sh`),
-  not the in-VM token bootstrap, over the demo NIC.
+- **Cluster join uses a host-issued config disk** — `scripts/asterkube-join.sh` mints a node
+  cert via the cluster CSR API and packs it into a small ext2 disk the node mounts at boot
+  (verified: registers and reaches Ready). The kernel-cmdline token bootstrap is unreliable
+  over the demo slirp NIC and is not the recommended path.
 - **astromac ships Permissive** (log-only) — armed but not blocking until set to Enforcing.
 - **NAT is a minimal datapath** — small global conntrack, no endpoint removal; not full Service semantics.
 - **Kernel gaps** — virtio devices only (no other NIC/driver classes, no GPU), no journaled

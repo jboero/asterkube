@@ -37,10 +37,19 @@ capability demos, and then **stays LIVE — it will not power off on its own**.
 
 ### Join a Kubernetes cluster (optional)
 
-The released image is a self-contained **demo** that runs standalone. To make a
-node register with *your* cluster you rebuild with join coordinates on the kernel
-cmdline — see **Build from source** below and `scripts/asterkube-boot-args.sh`.
-(A joined node registers `NotReady` until a CNI is installed.)
+The released image runs standalone as a **demo**. To make it register with *your*
+cluster, mint a join bundle (a small config disk with a host-issued node cert) and
+attach it to the VM — no rebuild needed:
+
+```bash
+scripts/asterkube-join.sh -n asterkube -s <apiserver-ip:port>   # writes asterkube-join.img
+# boot the released ISO/qcow2 with the bundle attached as a virtio-blk disk
+# (serial=asterkubecfg); the node mounts it, installs the bundled CNI, and joins.
+kubectl get nodes    # asterkube ... Ready
+```
+
+Verified: the node registers and reaches `Ready`. See the README "join a cluster"
+section for the full QEMU line.
 
 ---
 
