@@ -54,12 +54,8 @@ func kubeletPhase(kubeletBin, crictlBin, sock string, env []string) {
 		}
 	}
 
-	// Node files the kubelet expects but the minimal node lacks. /dev/kmsg backs
-	// the kubelet's kernel-log OOM watcher; Asterinas has no kmsg device, so
-	// point it at /dev/null (open succeeds, reads hit EOF and the watcher
-	// harmlessly exits). /etc/machine-id is the node's stable identity.
-	_ = os.Symlink("/dev/null", "/dev/kmsg")
-	_ = os.WriteFile("/etc/machine-id", []byte("0a57e1b1a5f34c0e9b00000000000001\n"), 0o444)
+	// Node files the kubelet expects but the minimal node lacks (see the helper).
+	prepareKubeletNodeFiles()
 	if err := os.WriteFile("/etc/kubernetes/manifests/hello.yaml", []byte(staticPodManifest), 0o644); err != nil {
 		fmt.Printf("kubelet: FAILED to write static pod: %v\n", err)
 		return

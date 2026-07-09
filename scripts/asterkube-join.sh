@@ -138,8 +138,13 @@ if [ -n "$DIRONLY" ]; then
 else
   command -v mke2fs >/dev/null || { echo "!! mke2fs (e2fsprogs) not found; use --dir instead" >&2; exit 1; }
   # 16 MiB ext2, populated rootlessly from the bundle dir; label asterkubecfg.
+  # Asterinas' ext2 driver is deliberately minimal: it mounts ONLY 4096-byte-block
+  # filesystems (super_block.rs requires log_block_size==2) and rejects the
+  # resize_inode ro-compat feature. mke2fs defaults to 1024-byte blocks +
+  # resize_inode for a small fs, which the driver refuses with EINVAL — so pin the
+  # block size and drop resize_inode to produce a disk the node can actually mount.
   rm -f "$OUT"; truncate -s 16M "$OUT"
-  mke2fs -q -t ext2 -L asterkubecfg -d "$BUNDLE" "$OUT" >/dev/null
+  mke2fs -q -t ext2 -b 4096 -O ^resize_inode -L asterkubecfg -d "$BUNDLE" "$OUT" >/dev/null
   echo "==> wrote join bundle image: $OUT ($(ls -lh "$OUT" | awk '{print $5}'), ext2, label=asterkubecfg)"
   echo "    attach it to the VM:"
   echo "      JOIN_BUNDLE=$OUT ./run-host-qemu.sh asterkube"

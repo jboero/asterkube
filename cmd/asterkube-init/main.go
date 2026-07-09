@@ -281,10 +281,14 @@ func runAsInit() {
 	// to reach a kube-apiserver?
 	probeOutboundTCP()
 
-	// If the kernel cmdline carries cluster coordinates (ASTERKUBE_APISERVER=…),
-	// bind this generic image to that cluster now — no config drive, no cloud-init.
-	// The kubelet TLS-bootstraps with the token, registers the Node, and persists.
-	if bootArgsConfigured() {
+	// Bind this generic image to a cluster, if asked. Preferred: a config-drive
+	// "join bundle" (asterkube-join.sh) carrying a PRE-ISSUED kubeconfig — the
+	// node registers with its issued cert, no in-VM CSR. Fallback: cluster
+	// coordinates on the kernel cmdline (ASTERKUBE_APISERVER=…), which TLS-
+	// bootstraps with a token. Either way the node registers and persists.
+	if dir, ok := findJoinBundle(); ok {
+		joinFromBundle(dir)
+	} else if bootArgsConfigured() {
 		bootArgsJoin()
 	}
 

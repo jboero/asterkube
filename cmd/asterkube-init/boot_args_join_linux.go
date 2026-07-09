@@ -133,6 +133,7 @@ func bootArgsJoin() {
 	// 4. Launch the REAL kubelet to TLS-bootstrap with the token and register.
 	root := "/var/lib/kubelet"
 	_ = os.MkdirAll(root+"/pki", 0o755)
+	prepareKubeletNodeFiles()
 	logPath := "/run/kubelet-join.log"
 	logf, err := os.Create(logPath)
 	if err != nil {
@@ -198,6 +199,7 @@ func bootArgsJoin() {
 		_ = cd.Process.Kill()
 		return
 	}
+	clusterJoined = true
 	fmt.Printf("asterkube-init: BOOT-ARGS JOIN PASSED — node %q registered with the apiserver ✓\n", node)
 	fmt.Println("asterkube-init: CNI installed (ptp+portmap); the node reports Ready once")
 	fmt.Println("asterkube-init: containerd's CRI confirms NetworkReady — check `kubectl get nodes`.")

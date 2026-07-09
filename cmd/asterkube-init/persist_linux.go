@@ -76,13 +76,13 @@ func serveForever() {
 	const line = "============================================================"
 	fmt.Println()
 	fmt.Println(line)
-	if bootArgsConfigured() {
+	if clusterJoined {
 		fmt.Println(" asterkube node is LIVE and joined a cluster.")
 		fmt.Println(" Check `kubectl get nodes` for this node; schedule workloads onto it.")
 	} else {
 		fmt.Println(" asterkube node is LIVE (standalone demo — NOT joined to a cluster).")
-		fmt.Println(" To join YOUR cluster, boot with ASTERKUBE_APISERVER=<ip:port> set")
-		fmt.Println(" — e.g. `asterkube_demo.sh --kubeconfig`.")
+		fmt.Println(" To join YOUR cluster, attach a join bundle built with")
+		fmt.Println(" `asterkube-join.sh` (see scripts/asterkube-join.sh).")
 	}
 	fmt.Println(" It stays up until shut down via ACPI (virsh shutdown /")
 	fmt.Println(" QEMU `system_powerdown`), which it handles gracefully.")
