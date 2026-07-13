@@ -7,3 +7,7 @@ build/*
 
 # kubernetes tree fetched by build-zeroc-kubelet.sh at the pinned tag (v1.35.6)
 /kubernetes/
+
+# GPU test build outputs (ISOs, kernel ELF, initramfs)
+artifacts/
+dist/

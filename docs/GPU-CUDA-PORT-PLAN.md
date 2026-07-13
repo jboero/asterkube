@@ -201,8 +201,93 @@ capabilities), **MSI-X** (`comps/pci/.../msix.rs`), DMA (`DmaStream`/
   `NV_PMC_BOOT_0` from BAR0, acquires MSI-X, and stubs the **P1** GSP-boot entry.
   Compiles clean and is linked + enumerated at runtime.
 
-**Next (P1, blocked on hardware access):** vendor `nvidia-open` 595, implement
-the `nvport`/`nv` OS interface in Rust, link the C RM behind `nvidia_gpu`, load
-`gsp_ga10x.bin`, and complete the RM/GSP handshake → the "GPU detected + GSP
-booted" milestone. Cannot be exercised here until IOMMU + passthrough are
-available.
+### 2026-07-13 — ✅ P0 PROVEN on real hardware: GPU visible inside Asterinas
+
+Booted the instrumented ISO on the headless Z840 with a **Quadro GV100**
+passed through via VFIO. The kernel printed:
+
+```
+nvidia: GPU enumerated inside Asterinas — 10de:1dba, NV_PMC_BOOT_0=0x140000a1 (probed 9 PCI devices)
+```
+
+End-to-end, C-free: Asterinas x86 **enumerated the passed-through GPU** on its
+PCI bus (`probed 9` vs 7 with no GPU), the Rust driver **matched** it, **read
+`NV_PMC_BOOT_0` over the vfio BAR0**, and **decoded** it — arch `0x14` = Volta,
+rev `a1`, matching `lspci`. (GV100 is Volta → correctly declined as "no GSP";
+the A4000, being Ampere/GSP, would instead be *claimed* and hit the P1 stub.)
+
+Three bugs found + fixed to get here:
+1. `aster-nvidia`'s own `ostd::info!` is silent on x86 → log the result from the
+   **kernel crate** (`driver::init` calls `aster_nvidia::report()`, which reads
+   atomics the driver fills: `PROBED_COUNT`, `MATCHED`).
+2. The optimizer **elided** the cross-crate registration call → forced with
+   `#[inline(never)]` + `core::hint::black_box`. Also made `aster-nvidia` a
+   **non-optional** dep (optional-dep `#[init_component]` inventory statics get
+   dropped by the linker).
+3. VFIO group "not viable" → the GPU's **audio function** must also be unbound
+   from `snd_hda_intel` and bound to `vfio-pci`, or QEMU silently won't start.
+
+### 2026-07-13 (later) — richer P0: full hardware inventory read on THIS machine (K4200)
+
+Non-disruptively (the K4200 is a spare Kepler card the host driver ignores, so
+binding it to vfio touches nothing), on the Z640 target machine:
+
+```
+nvidia: GPU enumerated inside Asterinas — 10de:11b4, NV_PMC_BOOT_0=0x0e4340a2 => Kepler impl 0x4 rev 10.2 (probed 9 PCI devices)
+nvidia:   BARs (MiB): BAR0(regs)=16 BAR1(VRAM window)=256 BAR3=32; MSI-X vectors=0; GSP-drivable=false
+nvidia:   pre-GSP architecture -> enumerated + identified, but not drivable by nvidia-open
+```
+
+The driver now reads the full inventory over the vfio BARs — chip id (GK104
+Kepler), the complete BAR layout, and MSI-X vector count — all matching the real
+card (`lspci`: BAR0 16M/BAR1 256M/BAR3 32M; Kepler = MSI, 0 MSI-X). C-free Rust.
+Kepler is pre-GSP so it's correctly enumerated-not-driven; the A4000 (Ampere)
+reports the same inventory + reaches the P1 GSP path.
+
+`scripts/gpu-local-test.sh` is a permanent, non-disruptive local P0 rig (binds a
+spare NVIDIA GPU to vfio, boots the instrumented ISO, prints the report).
+
+**Next (P1):** vendor `nvidia-open` 595, implement the `nvport`/`nv` OS
+interface in Rust, link the C RM behind `nvidia_gpu`, load `gsp_ga10x.bin`, and
+complete the RM/GSP handshake → "GSP booted." The passthrough + enumeration
+substrate this needs is now proven working.
+
+### 2026-07-13 (later) — ✅ USE the GPU from within a container in Asterinas
+
+Went past "see" to "use", C-free in everything shipped:
+
+- **Use GPU memory:** the driver retains the passed-through GPU's BAR1 VRAM
+  window and round-trips patterns through it (`VRAM read/write via BAR1: OK`).
+- **`/dev/nvidia0`** (asterinas `b953654c9`): a kernel char device (major 195,
+  modeled on `/dev/fb0`) exposes that BAR1 `IoMem` to userspace with
+  `read`/`write` **and `mmap`** — no GSP needed, works on any enumerated GPU.
+- **From a container** (asterkube `0c759d3`, `gpu-probe/`): a pure-Go (CGO-free)
+  PID 1 launches a container (new pid/uts/mount/ipc namespaces + a
+  container-private `/dev` built with tmpfs+mknod) and reads/writes/mmaps GPU
+  VRAM from inside it — `GPU-IN-CONTAINER: PASS`.
+
+Proven on **K4200** (Kepler, Z640) and **GV100** (Volta, Z840).
+
+### 2026-07-13 (later) — ✅ GSP-capable Ampere GPU (RTX A5000 = GA104, the A4000's family)
+
+On a Precision laptop (display on the Intel iGPU, so the A5000 frees to vfio
+without dropping the screen; runtime teardown — stop sddm+nvidia-powerd, unload
+nvidia — since boot-claim needs vfio-pci in the initramfs):
+
+```
+nvidia: GPU enumerated inside Asterinas — 10de:24b6, NV_PMC_BOOT_0=0xb74000a1 => Ampere impl 0x4 rev 10.1
+nvidia:   BARs (MiB): BAR0(regs)=16 BAR1(VRAM window)=16384; GSP-drivable=true
+nvidia:   VRAM read/write via BAR1: OK — Asterinas can use the GPU's memory
+GPU-IN-CONTAINER: PASS — a containerized process used the GPU via /dev/nvidia0
+```
+
+First **`GSP-drivable=true`** run. The A5000 Mobile is **GA104 — the same silicon
+family as the RTX A4000** — so this exercises the exact A4000 GSP code path, with
+a full 16 GiB VRAM aperture, used from a container. The literal A4000 (Z640
+02:00.0) stays untested only because it is that box's sole display GPU.
+
+**Next (P1 — CUDA):** the log's "load GSP firmware + RM handshake" milestone —
+vendor `nvidia-open`, implement the OS glue in Rust, load `gsp_ga10x.bin`,
+complete the RM/GSP handshake, then P2 (UVM) → P3 (uAPI) → CGO-free CUDA
+userspace. The see+use+container substrate this builds on is now proven on a
+GSP-capable Ampere GPU.
