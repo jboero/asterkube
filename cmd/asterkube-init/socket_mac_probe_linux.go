@@ -23,7 +23,7 @@ import (
 	"syscall"
 )
 
-// socket_mac_probe exercises the astromac NETWORK MAC: an IPv4 endpoint carries
+// socket_mac_probe exercises the astermac NETWORK MAC: an IPv4 endpoint carries
 // a tenant label, and a process of a different tenant may not connect to it even
 // on a shared network (pods on a shared bridge can reach each other's IPs, which
 // namespaces do not prevent). The MAC hook runs before the connect itself, so a
@@ -151,7 +151,7 @@ func socketMacProbeMain() {
 // runSocketMacProbe (parent side, called from init) drives the network-MAC demo.
 func runSocketMacProbe() {
 	fmt.Println()
-	fmt.Println("asterkube-init: ===== astromac network MAC probe =====")
+	fmt.Println("asterkube-init: ===== astermac network MAC probe =====")
 	fmt.Println("asterkube-init: tenant-labeled IP; cross-tenant connects are mediated")
 
 	self, err := os.Executable()
@@ -165,9 +165,9 @@ func runSocketMacProbe() {
 
 	ok := main.ProcessState != nil && main.ProcessState.ExitCode() == 0
 	if ok {
-		fmt.Println("asterkube-init: astromac network MAC is ENFORCED (cross-tenant deny + same/unconfined allow + permissive log) ✓")
+		fmt.Println("asterkube-init: astermac network MAC is ENFORCED (cross-tenant deny + same/unconfined allow + permissive log) ✓")
 	} else {
-		fmt.Println("asterkube-init: astromac network MAC probe INCOMPLETE — see above")
+		fmt.Println("asterkube-init: astermac network MAC probe INCOMPLETE — see above")
 	}
-	fmt.Println("asterkube-init: ===== end astromac network MAC probe =====")
+	fmt.Println("asterkube-init: ===== end astermac network MAC probe =====")
 }

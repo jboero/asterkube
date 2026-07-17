@@ -23,7 +23,7 @@ import (
 	"syscall"
 )
 
-// file_mac_probe exercises the astromac FILE-access MAC: a file carries a tenant
+// file_mac_probe exercises the astermac FILE-access MAC: a file carries a tenant
 // label, and a process of a different tenant cannot access it even on a shared
 // filesystem (where namespaces and uid/gid DAC do not separate tenants). It
 // proves cross-tenant deny (enforcing), same-tenant allow, unconfined (tenant 0)
@@ -32,7 +32,7 @@ import (
 const (
 	fileMacProbeEnv  = "ASTERKUBE_FILE_MAC_PROBE" // "main" | "peer"
 	fileMacPathEnv   = "ASTERKUBE_FILE_MAC_PATH"
-	secretPath       = "/tmp/astromac-secret"
+	secretPath       = "/tmp/astermac-secret"
 
 	// "KUFL": label the file at fd (arg2) with a tenant (arg3).
 	prAsterkubeLabelFd = 0x4b55464c
@@ -153,7 +153,7 @@ func fileMacProbeMain() {
 // runFileMacProbe (parent side, called from init) drives the file-MAC demo.
 func runFileMacProbe() {
 	fmt.Println()
-	fmt.Println("asterkube-init: ===== astromac file-access MAC probe =====")
+	fmt.Println("asterkube-init: ===== astermac file-access MAC probe =====")
 	fmt.Println("asterkube-init: tenant-labeled file; cross-tenant reads are mediated")
 
 	self, err := os.Executable()
@@ -167,9 +167,9 @@ func runFileMacProbe() {
 
 	ok := main.ProcessState != nil && main.ProcessState.ExitCode() == 0
 	if ok {
-		fmt.Println("asterkube-init: astromac file MAC is ENFORCED (cross-tenant deny + same/unconfined allow + permissive log) ✓")
+		fmt.Println("asterkube-init: astermac file MAC is ENFORCED (cross-tenant deny + same/unconfined allow + permissive log) ✓")
 	} else {
-		fmt.Println("asterkube-init: astromac file MAC probe INCOMPLETE — see above")
+		fmt.Println("asterkube-init: astermac file MAC probe INCOMPLETE — see above")
 	}
-	fmt.Println("asterkube-init: ===== end astromac file-access MAC probe =====")
+	fmt.Println("asterkube-init: ===== end astermac file-access MAC probe =====")
 }

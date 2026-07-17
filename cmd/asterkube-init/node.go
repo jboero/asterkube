@@ -53,8 +53,8 @@ const (
 // bridge, enabling the pod↔pod connectivity tests.
 const peerIPEnv = "ASTERKUBE_PEER_IP"
 
-// astromac multi-tenant adapter env vars. podTenantEnv tells a container which
-// astromac tenant to label itself with (the node agent translates a pod's spec
+// astermac multi-tenant adapter env vars. podTenantEnv tells a container which
+// astermac tenant to label itself with (the node agent translates a pod's spec
 // into this); tenantProbeIPEnv asks the container to attempt a cross-tenant TCP
 // connect to that address and report whether the kernel isolated it.
 const (
@@ -107,7 +107,7 @@ type podNetwork struct {
 	MasqRole   string `json:"masqRole"`
 	MasqTarget string `json:"masqTarget"`
 	// TenantProbeIP, if set, asks this (tenant-labeled) pod to attempt a TCP
-	// connect to that peer address — used to demonstrate astromac cross-tenant
+	// connect to that peer address — used to demonstrate astermac cross-tenant
 	// network isolation between real pods.
 	TenantProbeIP string `json:"tenantProbeIP"`
 }
@@ -126,11 +126,11 @@ type podSpec struct {
 	Env       []string     `json:"env"`
 	Resources podResources `json:"resources"`
 	Network   *podNetwork  `json:"network,omitempty"`
-	// Tenant, if non-zero, is the astromac tenant the node agent assigns to this
+	// Tenant, if non-zero, is the astermac tenant the node agent assigns to this
 	// pod — the multi-tenant MAC label. 0 (the default) = unconfined, so an
 	// ordinary pod is unaffected. This is the adapter from "pod spec" to a
 	// kernel security label, the place a real launcher would map a namespace /
-	// seLinuxOptions / tenant annotation onto astromac.
+	// seLinuxOptions / tenant annotation onto astermac.
 	Tenant uint32 `json:"tenant"`
 }
 
@@ -174,7 +174,7 @@ func runNodeAgent() {
 		bridged = append(bridged, buildKubeProxyDemoSpecs()...)
 	}
 
-	// Append the astromac multi-tenant demo: two real pods on a shared bridge
+	// Append the astermac multi-tenant demo: two real pods on a shared bridge
 	// with different tenants; the kernel MAC must isolate them. This exercises
 	// the adapter (pod spec -> kernel label) end to end on the real pod path.
 	bridged = append(bridged, buildTenantDemoSpecs()...)
@@ -339,7 +339,7 @@ func startPodContainer(spec podSpec, netEnv []string) *podHandle {
 	cmd := exec.Command(spec.Command[0], spec.Command[1:]...)
 	cmd.Env = append(append([]string{}, spec.Env...), podHostnameEnv+"="+spec.Hostname)
 	// Adapter: translate the pod's tenant from its spec into a label the
-	// container applies to itself (astromac multi-tenant MAC).
+	// container applies to itself (astermac multi-tenant MAC).
 	if spec.Tenant != 0 {
 		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%d", podTenantEnv, spec.Tenant))
 	}
@@ -481,7 +481,7 @@ func runContainer() {
 		sync.Close()
 	}
 
-	// Adapter: if the node agent assigned this pod an astromac tenant, label
+	// Adapter: if the node agent assigned this pod an astermac tenant, label
 	// ourselves before doing anything else, so all our operations are mediated.
 	containerSetTenant()
 
@@ -628,7 +628,7 @@ func runBridgedPods(specs []podSpec) {
 		break
 	}
 
-	// astromac adapter: before launching, label each tenant pod's IP with its
+	// astermac adapter: before launching, label each tenant pod's IP with its
 	// tenant and switch the MAC to enforcing. Done up front (not per-pod) so a
 	// pod's cross-tenant connect can never race ahead of its peer's label.
 	applyTenantLabels(specs)

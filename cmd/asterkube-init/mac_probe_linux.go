@@ -24,7 +24,7 @@ import (
 	"syscall"
 )
 
-// mac_probe exercises the native astromac MAC: every process carries a tenant
+// mac_probe exercises the native astermac MAC: every process carries a tenant
 // label, and a process of one tenant may not signal a process of a different
 // tenant. It proves the kernel hook fires and that enforcing vs. permissive
 // behave correctly — while the default (unlabeled, tenant 0) path is untouched,
@@ -149,10 +149,10 @@ func macProbeMain() {
 	os.Exit(3)
 }
 
-// runMacProbe (parent side, called from init) drives the astromac demonstration.
+// runMacProbe (parent side, called from init) drives the astermac demonstration.
 func runMacProbe() {
 	fmt.Println()
-	fmt.Println("asterkube-init: ===== astromac (native MAC) probe =====")
+	fmt.Println("asterkube-init: ===== astermac (native MAC) probe =====")
 	fmt.Println("asterkube-init: tenant-labeled processes; cross-tenant signals are mediated")
 
 	self, err := os.Executable()
@@ -166,11 +166,11 @@ func runMacProbe() {
 
 	ok := main.ProcessState != nil && main.ProcessState.ExitCode() == 0
 	if ok {
-		fmt.Println("asterkube-init: astromac MAC is ENFORCED (cross-tenant deny + same-tenant allow + permissive log) ✓")
+		fmt.Println("asterkube-init: astermac MAC is ENFORCED (cross-tenant deny + same-tenant allow + permissive log) ✓")
 	} else {
-		fmt.Println("asterkube-init: astromac MAC probe INCOMPLETE — see above")
+		fmt.Println("asterkube-init: astermac MAC probe INCOMPLETE — see above")
 	}
 	// Leave the global mode at permissive (the k8s-safe default) for the rest of
 	// the boot; unlabeled node/pod processes (tenant 0) are unaffected regardless.
-	fmt.Println("asterkube-init: ===== end astromac probe =====")
+	fmt.Println("asterkube-init: ===== end astermac probe =====")
 }

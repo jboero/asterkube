@@ -24,13 +24,13 @@ import (
 	"syscall"
 )
 
-// This file is the astromac multi-tenant ADAPTER: it turns a pod's spec (its
+// This file is the astermac multi-tenant ADAPTER: it turns a pod's spec (its
 // Tenant field — where a real launcher would map a namespace / seLinuxOptions /
 // tenant annotation) into actual kernel security labels, and demonstrates that
 // two real pods of different tenants are isolated by the kernel MAC.
 
 // ipToBE converts a dotted-quad IPv4 string to u32::from_be_bytes(octets), the
-// key the kernel's astromac IP-label table and connect hook use.
+// key the kernel's astermac IP-label table and connect hook use.
 func ipToBE(s string) uint32 {
 	ip := net.ParseIP(s).To4()
 	if ip == nil {
@@ -40,7 +40,7 @@ func ipToBE(s string) uint32 {
 }
 
 // applyTenantLabels labels each tenant pod's IP with its tenant and switches the
-// astromac MAC to enforcing — done before any pod starts, so a cross-tenant
+// astermac MAC to enforcing — done before any pod starts, so a cross-tenant
 // connect can never race ahead of its peer's label. Unlabeled (tenant 0) pods,
 // i.e. every ordinary pod, are unaffected.
 func applyTenantLabels(specs []podSpec) {
@@ -50,17 +50,17 @@ func applyTenantLabels(specs []podSpec) {
 			continue
 		}
 		if err := labelIP(uintptr(ipToBE(s.Network.PodIP)), uintptr(s.Tenant)); err != nil {
-			fmt.Printf("astromac: FAILED to label pod %q IP %s: %v\n", s.Name, s.Network.PodIP, err)
+			fmt.Printf("astermac: FAILED to label pod %q IP %s: %v\n", s.Name, s.Network.PodIP, err)
 			continue
 		}
-		fmt.Printf("astromac: labeled pod %q IP %s -> tenant %d\n", s.Name, s.Network.PodIP, s.Tenant)
+		fmt.Printf("astermac: labeled pod %q IP %s -> tenant %d\n", s.Name, s.Network.PodIP, s.Tenant)
 		labeled = true
 	}
 	if labeled {
 		if err := prctlMacMode(macModeEnforcing); err != nil {
-			fmt.Printf("astromac: FAILED to set enforcing: %v\n", err)
+			fmt.Printf("astermac: FAILED to set enforcing: %v\n", err)
 		} else {
-			fmt.Println("astromac: enforcing ON for tenant-labeled pods (unlabeled pods unaffected)")
+			fmt.Println("astermac: enforcing ON for tenant-labeled pods (unlabeled pods unaffected)")
 		}
 	}
 }
@@ -79,7 +79,7 @@ func cleanupTenantLabels(specs []podSpec) {
 // containerSetTenant runs at the very start of a container: if the node agent
 // assigned this pod a tenant, the pod labels itself (it holds CAP_SYS_ADMIN in
 // its namespaces). All of the pod's subsequent operations are then mediated by
-// astromac against that tenant.
+// astermac against that tenant.
 func containerSetTenant() {
 	t := os.Getenv(podTenantEnv)
 	if t == "" {
@@ -90,10 +90,10 @@ func containerSetTenant() {
 		return
 	}
 	if err := prctlSetTenant(uintptr(n)); err != nil {
-		fmt.Printf("astromac: pod failed to set tenant %d: %v\n", n, err)
+		fmt.Printf("astermac: pod failed to set tenant %d: %v\n", n, err)
 		return
 	}
-	fmt.Printf("astromac: pod labeled tenant %d\n", n)
+	fmt.Printf("astermac: pod labeled tenant %d\n", n)
 }
 
 // tenantConnectProbe attempts a TCP connect from this (tenant-labeled) pod to a
@@ -110,13 +110,13 @@ func tenantConnectProbe(target string) string {
 	sa.Addr = [4]byte{byte((ip >> 24) & 0xff), byte((ip >> 16) & 0xff), byte((ip >> 8) & 0xff), byte(ip & 0xff)}
 	err = syscall.Connect(fd, sa)
 	if err == syscall.EPERM {
-		return fmt.Sprintf("connect %s -> DENIED by astromac (EPERM): cross-tenant isolated ✓", target)
+		return fmt.Sprintf("connect %s -> DENIED by astermac (EPERM): cross-tenant isolated ✓", target)
 	}
 	return fmt.Sprintf("connect %s -> NOT isolated (err=%v)", target, err)
 }
 
 // buildTenantDemoSpecs builds two real pods on a shared bridge with different
-// astromac tenants. tn1 (tenant 1) tries to reach tn2 (tenant 2) — which the
+// astermac tenants. tn1 (tenant 1) tries to reach tn2 (tenant 2) — which the
 // kernel must deny, proving multi-tenant isolation between actual pods (not just
 // the synthetic probes), driven entirely by the pods' spec via the adapter.
 func buildTenantDemoSpecs() []podSpec {

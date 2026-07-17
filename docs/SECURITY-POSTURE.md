@@ -26,8 +26,8 @@ framekernel-native isolation model for the deep tenancy boundary over time.
   nosuid/nodev already give the practical protection); capability drop-set audit;
   cgroup cpu.max/accounting. **Dropped:** microVM-per-tenant (overkill on a
   memory-safe framekernel), resolve daemon (use resolv.conf/hosts/nsswitch/DHCP),
-  SELinux ABI port (native astromac MAC instead). **Already covered:** tenant
-  volume isolation (astromac file MAC denies cross-tenant `(dev,ino)` access).
+  SELinux ABI port (native astermac MAC instead). **Already covered:** tenant
+  volume isolation (astermac file MAC denies cross-tenant `(dev,ino)` access).
 
 ## Earlier progress (2026-06-28)
 
@@ -35,7 +35,7 @@ framekernel-native isolation model for the deep tenancy boundary over time.
   (was a no-op stub). `kernel/src/seccomp.rs`. Verified: ERRNO filter blocks a
   syscall, KILL filter terminates the process; no-filter = no change.
   *asterinas `56e7ae76d`, kubelet `70eaab2`.*
-- ✅ **astromac native MAC** (Tier C #7) — per-process tenant labels mediating
+- ✅ **astermac native MAC** (Tier C #7) — per-process tenant labels mediating
   cross-tenant operations, permissive by default. A new LSM module on the
   Yama-style framework, NOT an SELinux port. **Three domains:**
   - *signals* (`kill`): `asterinas 624f225e1`, `kubelet 2edbfed`.
@@ -49,7 +49,7 @@ framekernel-native isolation model for the deep tenancy boundary over time.
   kernel labels (`PR_ASTERKUBE_SETTENANT` on the pod + `LABEL_IP` on its IP +
   enforcing), demonstrated with two real pods where tn1 is denied connecting to
   tn2. `kubelet 5990501`. This is where a launcher would map a
-  namespace/seLinuxOptions/annotation onto astromac.
+  namespace/seLinuxOptions/annotation onto astermac.
   Tags `asterkube-sec-phase2` (signal+file), later commits on `asterkube`.
 - ⏭ **Next:** user namespaces + uid_map (Tier A #2) — assessed; see
   `asterkube/USER-NAMESPACES.md` for the staged plan. Security-critical (a bug =

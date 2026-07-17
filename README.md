@@ -74,7 +74,7 @@ asterkube  (this repo, Apache-2.0)
 ```
 
 - **`asterinas`** is a git submodule pinned to our kernel fork — ~50 commits of kernel
-  work (namespaces, seccomp-BPF, the astromac MAC, a Service NAT datapath, an
+  work (namespaces, seccomp-BPF, the astermac MAC, a Service NAT datapath, an
   nftables-compatible netlink surface) live there.
 - **`kubernetes`** is *not* vendored — the build fetches the pinned tag `v1.35.6` on
   demand, because compiling the real `cmd/kubelet/app` needs the full tree.
@@ -123,7 +123,7 @@ The highlights:
   privesc-safe capability boundary); cgroup v2 cpu/memory/pids enforcement.
 - **Real seccomp-BPF** — a classic-BPF interpreter enforcing filters at the syscall gate
   (was a permissive stub); `PR_GET/SET_SECCOMP`.
-- **astromac** — a framekernel-native Mandatory Access Control module (native
+- **astermac** — a framekernel-native Mandatory Access Control module (native
   capability-MAC, not a SELinux port): cross-tenant **signal**, **file**, and **network**
   isolation with unforgeable per-process tenant labels.
 - **Networking datapath** — L3 bridge, Service DNAT (ClusterIP) with load-balanced
@@ -251,7 +251,7 @@ This is a proof of concept, not a product:
   cert via the cluster CSR API and packs it into a small ext2 disk the node mounts at boot
   (verified: registers and reaches Ready). The kernel-cmdline token bootstrap is unreliable
   over the demo slirp NIC and is not the recommended path.
-- **astromac ships Permissive** (log-only) — armed but not blocking until set to Enforcing.
+- **astermac ships Permissive** (log-only) — armed but not blocking until set to Enforcing.
 - **NAT is a minimal datapath** — small global conntrack, no endpoint removal; not full Service semantics.
 - **Kernel gaps** — virtio devices only (no other NIC/driver classes, no GPU), no journaled
   filesystem (ext4/btrfs) or aarch64 yet. Fine for virtio-backed VM workloads; not bare metal.

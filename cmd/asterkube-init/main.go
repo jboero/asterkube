@@ -78,7 +78,7 @@ func main() {
 		seccompProbeChild(mode)
 		return
 	}
-	// An astromac MAC probe role (re-exec'd by runMacProbe). "main" runs the
+	// An astermac MAC probe role (re-exec'd by runMacProbe). "main" runs the
 	// scenario; "peer" is the second tenant it signals. Before PID-1 dispatch.
 	switch os.Getenv(macProbeEnv) {
 	case "main":
@@ -88,7 +88,7 @@ func main() {
 		macProbePeer()
 		return
 	}
-	// astromac file-access MAC probe roles.
+	// astermac file-access MAC probe roles.
 	switch os.Getenv(fileMacProbeEnv) {
 	case "main":
 		fileMacProbeMain()
@@ -97,7 +97,7 @@ func main() {
 		fileMacProbePeer()
 		return
 	}
-	// astromac network MAC probe roles.
+	// astermac network MAC probe roles.
 	switch os.Getenv(socketMacProbeEnv) {
 	case "main":
 		socketMacProbeMain()
@@ -250,7 +250,7 @@ func runAsInit() {
 	// leaks into the node agent or container runtime.
 	runSeccompProbe()
 
-	// Prove the native astromac MAC mediates cross-tenant operations (the second
+	// Prove the native astermac MAC mediates cross-tenant operations (the second
 	// hardening milestone). Permissive by default; the probe drives enforcing
 	// transiently in a child subtree and restores permissive.
 	runMacProbe()

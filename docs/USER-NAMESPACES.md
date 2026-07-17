@@ -127,8 +127,8 @@ join a peer userns by fd.
 
 ## Interaction with asterkube's other work
 
-- **Rootless + astromac**: once Stage 3 lands, a tenant's pods can run with uid 0
-  mapped to an unprivileged host uid, *and* be astromac-labeled — defense in
+- **Rootless + astermac**: once Stage 3 lands, a tenant's pods can run with uid 0
+  mapped to an unprivileged host uid, *and* be astermac-labeled — defense in
   depth (a userns escape still hits the MAC).
 - **seccomp**: unaffected; orthogonal.
 - **CRI setns-into-PID-ns** (the other deferred gap) is independent of userns but

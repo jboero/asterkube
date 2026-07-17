@@ -21,7 +21,7 @@ kubelet (v1.35.6). Split by where the work lives.
 ### Security enforcement
 - **Real seccomp-BPF** — a classic-BPF interpreter that runs and enforces filters at the syscall gate (previously a permissive stub). Full `SECCOMP_RET_*` action set (allow / errno / trap→SIGSYS / kill-thread / kill-process) with Linux severity precedence, STRICT mode, per-thread state inherited across clone/fork and preserved across execve.
 - **`PR_GET_SECCOMP` / `PR_SET_SECCOMP`** — seccomp detection + legacy install path.
-- **astromac — a framekernel-native Mandatory Access Control module** (native capability-MAC, not a SELinux port). Every process carries an unforgeable tenant label; tenant 0 is unconfined; Disabled/Permissive/Enforcing modes. Three mediation domains:
+- **astermac — a framekernel-native Mandatory Access Control module** (native capability-MAC, not a SELinux port). Every process carries an unforgeable tenant label; tenant 0 is unconfined; Disabled/Permissive/Enforcing modes. Three mediation domains:
   - **Signal** — deny cross-tenant `kill`/signals (checked before DAC).
   - **File** — deny cross-tenant read/write/exec via an in-kernel `(dev, ino)`→tenant table, hooked into `check_permission`.
   - **Network** — deny cross-tenant IPv4 `connect()` via an IP→tenant table.
@@ -71,7 +71,7 @@ kubelet (v1.35.6). Split by where the work lives.
 - **Boot-args join** — kubeadm-style bootstrap kubeconfig from the `ASTERKUBE_*` cmdline; apiserver pinned by IP + CA-hash. **Dual node identity**: advertises `kernel.asterinas.io/name=asterinas` + `kernel.asterinas.io/compat=linux` via `--node-labels` while keeping the well-known `kubernetes.io/os=linux` (the ABI personality that keeps scheduling + OCI image matching working). **CA-bundle install**, in-cluster apiserver hostname resolution, `/etc/fstab` support, kubelet `--root-dir` on the ext2 block device, outbound TCP+TLS gate before join.
 
 ### Verification probes (adversarial, run at boot)
-Each exercises a kernel guarantee end-to-end and fails the boot if it doesn't hold: seccomp enforcement; astromac signal/file/network MAC; tenant adapter (label real pods from spec); user-namespace + capability-boundary + id-mapping; volume-mount hardening; `NETLINK_NETFILTER`; shebang path. Plus datapath probes: Service DNAT (bridged pods, TCP, load-balanced backends), cross-subnet forwarding, pod-egress masquerade, node-originated ClusterIP DNAT, end-to-end Service DNAT via kube-proxy's own rule.
+Each exercises a kernel guarantee end-to-end and fails the boot if it doesn't hold: seccomp enforcement; astermac signal/file/network MAC; tenant adapter (label real pods from spec); user-namespace + capability-boundary + id-mapping; volume-mount hardening; `NETLINK_NETFILTER`; shebang path. Plus datapath probes: Service DNAT (bridged pods, TCP, load-balanced backends), cross-subnet forwarding, pod-egress masquerade, node-originated ClusterIP DNAT, end-to-end Service DNAT via kube-proxy's own rule.
 
 ---
 
@@ -118,6 +118,6 @@ unpack into the in-memory rootfs dominates, not decompression).
 
 ## Current limitations (honesty flags)
 
-- **astromac ships in Permissive (log-only) mode** — armed but not blocking until the mode is set to Enforcing.
+- **astermac ships in Permissive (log-only) mode** — armed but not blocking until the mode is set to Enforcing.
 - **NAT is a minimal datapath** — small global conntrack table, no endpoint removal, masquerade keeps the source port. Fine for the demo; not yet production Service semantics.
 - **No CNI in the self-contained image** — a joined node registers but stays `NotReady` until a CNI is added.
