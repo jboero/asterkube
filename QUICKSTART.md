@@ -12,12 +12,12 @@ Debian/Ubuntu), and KVM (`/dev/kvm`, optional but much faster).
 
 ```bash
 # 1. download the release artifacts
-gh release download asterkube-v0.1 --repo upbound/asterkube
-#    (or grab the .iso / .qcow2 from https://github.com/upbound/asterkube/releases)
+gh release download asterkube-v0.1 --repo jboero/asterkube
+#    (or grab the .iso / .qcow2 from https://github.com/jboero/asterkube/releases)
 sha256sum -c SHA256SUMS
 
 # 2. boot it — the helper auto-detects OVMF and uses KVM when available
-curl -sO https://raw.githubusercontent.com/upbound/asterkube/main/scripts/run-release.sh
+curl -sO https://raw.githubusercontent.com/jboero/asterkube/main/scripts/run-release.sh
 chmod +x run-release.sh
 ./run-release.sh asterkube-node-v0.1.iso        # or the .qcow2
 ```
@@ -61,7 +61,7 @@ Rust + OSDK toolchain, so you don't install those on the host.
 
 ```bash
 # 1. clone with the kernel submodule
-git clone --recursive https://github.com/upbound/asterkube && cd asterkube
+git clone --recursive https://github.com/jboero/asterkube && cd asterkube
 
 # 2. create the Asterinas OSDK build container (named 'asterkube') and install cargo-osdk
 docker run -d --name asterkube --privileged --network=host -v /dev:/dev \
@@ -83,6 +83,26 @@ scripts/run-release.sh asterinas/target/osdk/aster-kernel-osdk-bin.iso
 The container name **must** be `asterkube` (the build scripts `docker exec asterkube …`).
 The kernel toolchain is pinned to `nightly-2026-04-03` inside the image; the first
 `cargo osdk build` compiles the kernel and takes a few minutes.
+
+### C. Boot with no GRUB2 (fully C-free) via rubu
+
+The released ISO boots via GRUB2 (C). To remove that last C component, boot through
+[rubu](https://github.com/jboero/rubu), a pure-Rust UEFI bootloader — the whole chain
+becomes C-free (rubu → Asterinas → Go kubelet). Build an EFI-handover bzImage and boot it:
+
+```bash
+git clone https://github.com/jboero/rubu ../rubu     # sibling checkout
+docker exec asterkube bash -lc \
+  'cd /root/asterinas/kernel && cargo osdk build --grub-boot-protocol linux --boot-method qemu-direct'
+RUBU=../rubu \
+KERNEL=asterinas/target/osdk/aster-kernel-osdk-bin \
+INITRD=asterinas/test/initramfs/build/initramfs.cpio.gz \
+JOIN_BUNDLE=asterkube-join.img \
+scripts/boot-via-rubu.sh
+```
+
+Verified: booted via rubu, the node still joins a cluster and reaches `Ready`. See the
+README's **Fully C-free boot** section.
 
 ---
 

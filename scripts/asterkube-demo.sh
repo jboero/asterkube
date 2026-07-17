@@ -22,7 +22,7 @@ set -euo pipefail
 trap 'rc=$?; [ $rc -ne 0 ] && echo "asterkube_demo.sh: aborted at line $LINENO (exit $rc)" >&2' ERR
 
 TAG=asterkube-v0.1
-BASE="https://github.com/upbound/asterkube/releases/download/${TAG}"
+BASE="https://github.com/jboero/asterkube/releases/download/${TAG}"
 
 # SIGPIPE-safe [a-z0-9] generator (tr </dev/urandom | head trips pipefail via SIGPIPE).
 rnd(){ local s; s=$(LC_ALL=C tr -dc 'a-z0-9' < <(head -c $(( $1 * 16 )) /dev/urandom)); printf '%s' "${s:0:$1}"; }

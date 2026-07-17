@@ -38,8 +38,10 @@ written entirely in Rust** to run cloud workloads. [Asterinas](https://github.co
 is exactly that: a Linux-ABI-compatible framekernel in Rust (MPL-2.0).
 
 **asterkube** is a proof of concept that turns Asterinas into a real Kubernetes node —
-and strips **C out of the entire image** (the sole exception is the GRUB2 bootloader, the
-next target). It is the full story behind the Upbound Labs post:
+and strips **C out of the entire image**. The one C component that used to remain, the
+GRUB2 bootloader, is now removable too: the companion pure-Rust bootloader
+**[rubu](https://github.com/jboero/rubu)** boots the node with no GRUB (verified — see
+[Fully C-free boot](#fully-c-free-boot-with-rubu)). It is the full story behind the post:
 **[Secure Kubernetes Without Linux or C](https://medium.com/upbound-labs/secure-kubernetes-without-linux-or-c-7f8cf4c824e8)**.
 
 > **Full disclosure:** this is an experimental proof of concept, largely written and
@@ -152,12 +154,12 @@ and OCI image matching across the ecosystem. It's *Linux-compatible*, not Linux.
 
 ## Try it now (no build)
 
-Grab a [release](https://github.com/upbound/asterkube/releases) image and boot it —
+Grab a [release](https://github.com/jboero/asterkube/releases) image and boot it —
 you only need `qemu-system-x86_64`, UEFI firmware (`edk2-ovmf` / `ovmf`), and KVM:
 
 ```bash
-gh release download asterkube-v0.1 --repo upbound/asterkube && sha256sum -c SHA256SUMS
-curl -sO https://raw.githubusercontent.com/upbound/asterkube/main/scripts/run-release.sh
+gh release download asterkube-v0.1 --repo jboero/asterkube && sha256sum -c SHA256SUMS
+curl -sO https://raw.githubusercontent.com/jboero/asterkube/main/scripts/run-release.sh
 chmod +x run-release.sh && ./run-release.sh asterkube-node-v0.1.iso     # or the .qcow2
 ```
 
@@ -170,7 +172,7 @@ Prerequisites: Docker, Go, `qemu-system-x86_64` + OVMF, `zstd`, and initramfs to
 (`cpio`, `readelf`). The build container carries the Rust + OSDK toolchain.
 
 ```bash
-git clone --recursive https://github.com/upbound/asterkube && cd asterkube
+git clone --recursive https://github.com/jboero/asterkube && cd asterkube
 
 # create the Asterinas OSDK build container (name MUST be 'asterkube') + install cargo-osdk
 docker run -d --name asterkube --privileged --network=host -v /dev:/dev \
@@ -213,6 +215,33 @@ kubelet. **Verified:** the zero-C Asterinas node registers and reaches `Ready=Tr
 in-VM CSR is unreliable over the demo slirp NIC; the config-disk bundle above is the
 recommended, verified path.)
 
+## Fully C-free boot with rubu
+
+The released image boots via GRUB2 — which is C, and the *only* C left anywhere in the
+stack. [**rubu**](https://github.com/jboero/rubu) removes it: a `#![no_std]`, zero-C UEFI
+bootloader (pure-Rust crypto, its own TCP/IP + TLS 1.3, its own TPM CRB driver) that
+verifies + **measures** the boot into a TPM and hands off to Asterinas over the Linux
+EFI-handover protocol. Boot the node through rubu and the entire chain is C-free —
+**rubu (Rust) → Asterinas (Rust kernel) → Go init/kubelet**, no GRUB, no libc, no C.
+
+```bash
+# 1. Build a Linux-EFI-handover bzImage of the kernel (in the OSDK container):
+docker exec asterkube bash -lc \
+  'cd /root/asterinas/kernel && cargo osdk build --grub-boot-protocol linux --boot-method qemu-direct'
+
+# 2. Boot it through rubu, with the join bundle from above so it still reaches Ready:
+RUBU=../rubu \
+KERNEL=asterinas/target/osdk/aster-kernel-osdk-bin \
+INITRD=asterinas/test/initramfs/build/initramfs.cpio.gz \
+JOIN_BUNDLE=asterkube-join.img \
+scripts/boot-via-rubu.sh
+```
+
+**Verified:** booted this way (rubu measures the kernel + initramfs into PCRs 8/9, then
+EFI-hands-off), the node still joins the cluster and reaches `Ready` — with **zero C in the
+boot path**. See [`scripts/boot-via-rubu.sh`](scripts/boot-via-rubu.sh) and the
+[rubu README](https://github.com/jboero/rubu).
+
 ## Limitations
 
 This is a proof of concept, not a product:
@@ -226,7 +255,8 @@ This is a proof of concept, not a product:
 - **NAT is a minimal datapath** — small global conntrack, no endpoint removal; not full Service semantics.
 - **Kernel gaps** — virtio devices only (no other NIC/driver classes, no GPU), no journaled
   filesystem (ext4/btrfs) or aarch64 yet. Fine for virtio-backed VM workloads; not bare metal.
-- **GRUB2** remains the one C component in the boot path.
+- **GRUB2** is the one C component in the *released* image's boot path — removed by booting
+  through [rubu](https://github.com/jboero/rubu) instead (see [Fully C-free boot](#fully-c-free-boot-with-rubu)).
 
 ## Licensing
 
