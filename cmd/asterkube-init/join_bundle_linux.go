@@ -32,6 +32,7 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -154,6 +155,25 @@ func joinFromBundle(dir string) {
 
 	// 1. eth0 up (idempotent with DHCP-first).
 	configureEth0BestEffort()
+
+	// 1b. The kubelet rejects a --node-ip that isn't assigned to a local interface
+	//     ("no preferred addresses found"). When the apiserver reaches this node
+	//     via a host port-forward to a well-known address (e.g. the hypervisor's
+	//     bridge IP) that differs from the guest's own DHCP address, add NODE_IP as
+	//     a /32 alias on eth0 so the kubelet advertises it. Best-effort; a /32 adds
+	//     no route, so it can't hijack the guest's real routing.
+	if nodeIP != "" {
+		if ip := net.ParseIP(nodeIP); ip != nil && ip.To4() != nil {
+			if nl, err := nlOpen(); err == nil {
+				if idx, err := nl.linkIndexByName("eth0"); err == nil {
+					if err := nl.addAddrV4(idx, ip.To4(), 32); err == nil {
+						fmt.Printf("asterkube-init: added node-ip alias %s/32 on eth0 (for apiserver reachability)\n", nodeIP)
+					}
+				}
+				nl.close()
+			}
+		}
+	}
 
 	// 2. Apply the bundle's cluster hostname pin + resolver, if present. Different
 	//    clusters have different apiserver hostnames/DNS, so the node reads them

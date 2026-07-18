@@ -184,6 +184,9 @@ dispatch:
 		err = cmdKill(g, rest)
 	case "delete":
 		err = cmdDelete(g, rest)
+	case "exec":
+		// Run a process inside a running container (kubectl exec / logs stream).
+		err = cmdExec(g, rest)
 	case "ps":
 		// Best-effort: report the container's init pid so the shim's monitoring
 		// has something to read.
