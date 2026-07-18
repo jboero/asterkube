@@ -113,6 +113,36 @@ echo "    fstab: etc/fstab (default template)"
 install -m 0644 "$HERE/../config/os-release" "$WORK/root/etc/os-release"
 echo "    os-release: etc/os-release (OS Image → Asterinas)"
 
+# A base /etc/hosts. containerd generates each pod sandbox's hosts file from the
+# node's, and fails sandbox creation ("open /etc/hosts: no such file or
+# directory") if the node has none. The init's installClusterHosts appends
+# cluster mappings to this at join time.
+if [ ! -f "$WORK/root/etc/hosts" ]; then
+  printf '127.0.0.1\tlocalhost localhost.localdomain\n::1\t\tlocalhost localhost.localdomain\n' \
+    > "$WORK/root/etc/hosts"
+  chmod 0644 "$WORK/root/etc/hosts"
+  echo "    hosts: etc/hosts (localhost base; join appends cluster entries)"
+fi
+
+# Bake a CA trust bundle so containerd (Go crypto/x509) can verify TLS to image
+# registries. Without it, EVERY pull fails "x509: certificate signed by unknown
+# authority" — including registry.k8s.io/pause, so no scheduled pod can start.
+# Source the host's bundle and drop it at the paths Go's root_linux.go probes.
+CA_SRC=""
+for c in /etc/pki/tls/certs/ca-bundle.crt /etc/ssl/certs/ca-certificates.crt \
+         /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem; do
+  [ -s "$c" ] && { CA_SRC="$c"; break; }
+done
+if [ -n "$CA_SRC" ]; then
+  for t in etc/ssl/certs/ca-certificates.crt etc/pki/tls/certs/ca-bundle.crt \
+           etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem; do
+    install -D -m 0644 "$CA_SRC" "$WORK/root/$t"
+  done
+  echo "    ca-bundle: baked $(basename "$CA_SRC") ($(wc -c <"$CA_SRC") bytes → registry TLS works)"
+else
+  echo "    !! no host CA bundle found — registry pulls will fail x509 (install ca-certificates)"
+fi
+
 echo "==> removing the C runtime (glibc closure) and any dynamic binaries"
 rm -rf "$WORK/root/lib64" "$WORK/root/lib"
 # Walk every regular file; drop anything that is a dynamically-linked ELF or a
