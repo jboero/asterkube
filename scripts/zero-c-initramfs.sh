@@ -184,6 +184,14 @@ while IFS= read -r -d '' f; do
   printf "    %-28s %s\n" "${f#$WORK/root/}" "$(file -b "$f" | grep -oE 'statically linked')"
 done < <(find "$WORK/root" -type f -print0)
 
+# Optionally bake a GSP firmware image so the nvidia driver's P1.4 loader can
+# boot the GPU System Processor. The driver probes /gsp_ga10x.bin (and
+# /lib/firmware/gsp_ga10x.bin) in the initramfs. Set GSP_FW=/path/to/gsp_ga10x.bin.
+if [ -n "${GSP_FW:-}" ] && [ -f "$GSP_FW" ]; then
+  install -D -m 0644 "$GSP_FW" "$WORK/root/gsp_ga10x.bin"
+  echo "    GSP firmware: /gsp_ga10x.bin ($(wc -c <"$GSP_FW") bytes) → nvidia P1.4 loader"
+fi
+
 echo "==> repacking $CPIO (zstd --ultra -22, the kernel unpacks gzip or zstd by magic)"
 # Max zstd: level 22 + a 128MB long-distance window. --no-check omits the content
 # checksum (the kernel's ruzstd is built without the hash feature). ~40% smaller
