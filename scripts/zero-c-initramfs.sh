@@ -55,6 +55,7 @@ decompress_cpio() {  # $1 = compressed cpio
   esac
 }
 ( cd "$WORK/root" && decompress_cpio "$OLDPWD/$CPIO" | cpio -idm --quiet )
+chmod -R u+w "$WORK/root" 2>/dev/null || true   # Nix-base ships read-only 0555 store dirs; make writable so the strip can remove them
 
 # /sbin/init -> ../usr/bin/kubelet, so the init binary lives there. We ship ONE
 # binary (no duplicate): `kubelet` is our static, CGO-free init/node-agent, and
@@ -62,6 +63,10 @@ decompress_cpio() {  # $1 = compressed cpio
 echo "==> swapping in fresh static init (single binary, no duplicate)"
 install -m 0755 "$WORK/init-bin" "$WORK/root/usr/bin/kubelet"
 rm -f "$WORK/root/usr/bin/asterkube-init"
+# Point /sbin/init at the kubelet. Absolute target: the base uses usrmerge
+# (/sbin -> usr/sbin), so a relative ../usr/bin/kubelet would resolve wrong.
+mkdir -p "$WORK/root/sbin"; ln -sf /usr/bin/kubelet "$WORK/root/sbin/init"
+echo "    /sbin/init -> /usr/bin/kubelet"
 
 # Bake the static container runtime + image into the initramfs so the image is
 # self-contained (no virtio-fs share). containerd and ctr are one binary (hard

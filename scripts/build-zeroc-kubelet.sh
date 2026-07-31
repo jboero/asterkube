@@ -61,7 +61,7 @@ GO
 echo "==> building (CGO_ENABLED=0) — this is heavy (~minutes)"
 LDFLAGS="-s -w -X k8s.io/component-base/version.gitVersion=$K8S_VERSION"
 ( cd "$K8S" && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOFLAGS=-trimpath \
-    go build -ldflags="$LDFLAGS" -o "$OUT" ./cmd/asterkube-kubelet )
+    go build -buildvcs=false -ldflags="$LDFLAGS" -o "$OUT" ./cmd/asterkube-kubelet )
 
 echo "==> verifying zero C"
 link=$(file -b "$OUT" | grep -oE 'statically linked|dynamically linked' || true)

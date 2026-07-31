@@ -11,7 +11,7 @@ TGZ="cni-plugins-linux-${ARCH}-${VER}.tgz"
 URL="https://github.com/containernetworking/plugins/releases/download/${VER}/${TGZ}"
 echo "==> downloading $TGZ"
 curl -fL# -o "/tmp/$TGZ" "$URL"
-tar -xzf "/tmp/$TGZ" -C "$OUT" ptp portmap host-local loopback
+tar -xzf "/tmp/$TGZ" -C "$OUT" ./ptp ./portmap ./host-local ./loopback
 echo "==> CNI plugins in $OUT:"
 for p in ptp portmap host-local loopback; do
   printf '  %-10s %s (NEEDED=%s)\n' "$p" "$(stat -c%s "$OUT/$p") bytes" \
