@@ -26,9 +26,16 @@ Everything below is source-confirmed unless marked `[INFERRED]`.
   **scrubber ucode** first — which is **not present in open-gpu-kernel-modules**
   (no `g_bindata_*Scrubber*`), unlike the booter. The alternative prerequisite,
   **FWSEC-FRTS**, is parsed from the **VBIOS ROM** (`kernel_gsp_fwsec.c`, BIT
-  tokens), a separate multi-hour sub-project. So `0x91 → 0` requires obtaining a
-  prerequisite ucode not available from the open driver — the next real step is
-  FWSEC-from-VBIOS extraction. Once `MAILBOX0==0` + `WPR2_ADDR_HI!=0` +
+  tokens), a separate multi-hour sub-project.
+  - **Seventh elimination (HW, this session):** set `frtsSize=0` in the meta —
+    i.e. told the booter *there is no FRTS region at all*. Still `0x91`
+    (`MAILBOX1=0x2` unchanged). If `0x91` meant "FRTS missing/invalid," removing
+    the FRTS requirement would have changed the code. It did not — so **`0x91` is
+    not FRTS-gated**, which *deprioritizes the FWSEC-from-VBIOS sub-project* and
+    points at the more fundamental **unscrubbed-FB / WPR-scrub** gate, whose
+    scrubber ucode is not in the open driver.
+  So `0x91 → 0` requires obtaining a
+  prerequisite ucode not available from the open driver. Once `MAILBOX0==0` + `WPR2_ADDR_HI!=0` +
   `verified==0xa0a0…`, proceed to §4 (GSP kick + msgq + `GSP_INIT_DONE`).
 
 ---
