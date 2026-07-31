@@ -15,10 +15,20 @@ Everything below is source-confirmed unless marked `[INFERRED]`.
 - ✅ **The signed 610.43.02 booter executes on the real A5000** — SEC2 reset +
   `kflcnSwitchToFalcon` releases the `0xbadf` priv lockdown (CPUCTL `0x10`), the
   booter authenticates its own signature and halts.
-- ⏳ It returns ACR code `MAILBOX0=0x91` (`MAILBOX1=0x2`) — our WPR meta not yet
-  accepted. `0x91` lives in the *closed* booter, so `0x91 → 0` is trial-and-error
-  on the WPR-meta layout (candidates: `sysmemAddrOfSignature` currently 0; heap /
-  `nonWprHeap` sizes; region IDs). Once `MAILBOX0==0` + `WPR2_ADDR_HI!=0` +
+- ⏳ It returns ACR code `MAILBOX0=0x91`. **Blocker identified (resource, not
+  logic).** Six candidate classes were eliminated on real hardware, each a
+  committed iteration on `cuda-p1.5c`: booter execution, WPR2 location (mmu-lock),
+  `.fwsignature_ga10x`, full 256-byte meta byte-correctness, GSP reset-into-RISC-V
+  ordering, and radix3 PTE format (bare `RmPhysAddr`, matches `kgspCreateRadix3`).
+  `0x91` survives all. The remaining prerequisite is **scrubbing/unlocking the FB
+  region** the booter DMAs WPR2 into: our WPR is ~212 MB (84 MB firmware + heap,
+  min 88 MB), larger than the pre-scrubbed top-of-FB region, so it needs the
+  **scrubber ucode** first — which is **not present in open-gpu-kernel-modules**
+  (no `g_bindata_*Scrubber*`), unlike the booter. The alternative prerequisite,
+  **FWSEC-FRTS**, is parsed from the **VBIOS ROM** (`kernel_gsp_fwsec.c`, BIT
+  tokens), a separate multi-hour sub-project. So `0x91 → 0` requires obtaining a
+  prerequisite ucode not available from the open driver — the next real step is
+  FWSEC-from-VBIOS extraction. Once `MAILBOX0==0` + `WPR2_ADDR_HI!=0` +
   `verified==0xa0a0…`, proceed to §4 (GSP kick + msgq + `GSP_INIT_DONE`).
 
 ---
