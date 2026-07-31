@@ -192,6 +192,16 @@ if [ -n "${GSP_FW:-}" ] && [ -f "$GSP_FW" ]; then
   echo "    GSP firmware: /gsp_ga10x.bin ($(wc -c <"$GSP_FW") bytes) → nvidia P1.4 loader"
 fi
 
+# Optionally bake the GSP boot ucodes (SEC2 booter_load + GSP RISC-V bootloader,
+# extracted from open-gpu-kernel-modules by scripts/extract-gsp-booter.py) at the
+# initramfs root, where the driver's P1.5c GSP boot reads them.
+if [ -n "${GSP_UCODE_DIR:-}" ] && [ -d "$GSP_UCODE_DIR" ]; then
+  for u in booter_load.img booter_load.sig booter_load.hdr gsprmboot.img gsprmboot.desc; do
+    [ -f "$GSP_UCODE_DIR/$u" ] && install -D -m 0644 "$GSP_UCODE_DIR/$u" "$WORK/root/$u"
+  done
+  echo "    GSP ucodes: $(ls "$GSP_UCODE_DIR" 2>/dev/null | tr '\n' ' ')→ /"
+fi
+
 echo "==> repacking $CPIO (zstd --ultra -22, the kernel unpacks gzip or zstd by magic)"
 # Max zstd: level 22 + a 128MB long-distance window. --no-check omits the content
 # checksum (the kernel's ruzstd is built without the hash feature). ~40% smaller
