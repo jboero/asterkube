@@ -15,28 +15,53 @@ Everything below is source-confirmed unless marked `[INFERRED]`.
 - ✅ **The signed 610.43.02 booter executes on the real A5000** — SEC2 reset +
   `kflcnSwitchToFalcon` releases the `0xbadf` priv lockdown (CPUCTL `0x10`), the
   booter authenticates its own signature and halts.
-- ⏳ It returns ACR code `MAILBOX0=0x91`. **Blocker identified (resource, not
-  logic).** Six candidate classes were eliminated on real hardware, each a
-  committed iteration on `cuda-p1.5c`: booter execution, WPR2 location (mmu-lock),
-  `.fwsignature_ga10x`, full 256-byte meta byte-correctness, GSP reset-into-RISC-V
-  ordering, and radix3 PTE format (bare `RmPhysAddr`, matches `kgspCreateRadix3`).
-  `0x91` survives all. The remaining prerequisite is **scrubbing/unlocking the FB
-  region** the booter DMAs WPR2 into: our WPR is ~212 MB (84 MB firmware + heap,
-  min 88 MB), larger than the pre-scrubbed top-of-FB region, so it needs the
-  **scrubber ucode** first — which is **not present in open-gpu-kernel-modules**
-  (no `g_bindata_*Scrubber*`), unlike the booter. The alternative prerequisite,
-  **FWSEC-FRTS**, is parsed from the **VBIOS ROM** (`kernel_gsp_fwsec.c`, BIT
-  tokens), a separate multi-hour sub-project.
-  - **Seventh elimination (HW, this session):** set `frtsSize=0` in the meta —
-    i.e. told the booter *there is no FRTS region at all*. Still `0x91`
-    (`MAILBOX1=0x2` unchanged). If `0x91` meant "FRTS missing/invalid," removing
-    the FRTS requirement would have changed the code. It did not — so **`0x91` is
-    not FRTS-gated**, which *deprioritizes the FWSEC-from-VBIOS sub-project* and
-    points at the more fundamental **unscrubbed-FB / WPR-scrub** gate, whose
-    scrubber ucode is not in the open driver.
-  So `0x91 → 0` requires obtaining a
-  prerequisite ucode not available from the open driver. Once `MAILBOX0==0` + `WPR2_ADDR_HI!=0` +
-  `verified==0xa0a0…`, proceed to §4 (GSP kick + msgq + `GSP_INIT_DONE`).
+- ⏳ It returns ACR code `MAILBOX0=0x91` / `MAILBOX1=0x2`. **Blocker re-diagnosed
+  (this session): the true missing step is FWSEC-FRTS/devinit — the driver's own
+  open path — NOT an unavailable ucode.** Seven candidate classes were eliminated
+  on real hardware, each a committed iteration on `cuda-p1.5c`: booter execution,
+  WPR2 location (mmu-lock), `.fwsignature_ga10x`, full 256-byte meta
+  byte-correctness, GSP reset-into-RISC-V ordering, radix3 PTE format (bare
+  `RmPhysAddr`, matches `kgspCreateRadix3`), and the meta's `frtsSize` field
+  (`frtsSize=0` → still `0x91`, so the *meta field* is not the gate).
+  Two structural facts pin the cause, both read straight from nvidia-open 610:
+  - **The scrubber / unscrubbed-FB hypothesis is dead.** `kgspGetPrescrubbedTopFbSize`
+    for GA102 (`_13afc5`) returns **exactly 256 MB**; `_kgspPrepareScrubberImageIfNeeded`
+    allocates a scrubber only if `neededSize > 256 MB` **or** it's the Ada WAR
+    (`kgspIsScrubberImageSupported`). Our WPR is ~212 MB < 256 MB, and there is
+    **no GA10x securescrub bindata at all** (only `..._AD10X.c` exists). So a real
+    GA102 boot **never runs a scrubber** and relies on the 256 MB pre-scrubbed
+    top-of-FB — which our WPR fits inside. Scrubbing is not the gate.
+  - **The real pre-booter step a GA10x driver runs and we don't is FWSEC-FRTS.**
+    In `kgspBootstrap_TU102` (NORMAL boot) the order is: *(scrubber — skipped on
+    GA102)* → **FWSEC-FRTS** (taken because `kgspGetFrtsSize`=1 MB > 0) →
+    `kflcnResetIntoRiscv` → program libos boot args → **Booter Load**. FWSEC runs
+    the VBIOS **devinit** tables and sets secure scratch/FRTS state the Booter
+    validates. Skipping it is a sufficient cause for `0x91`. And FWSEC is **fully
+    open**: read the VBIOS from the expansion-ROM/`NV_PROM` aperture over BAR0,
+    then parse BIT → FALCON_UCODE table → FWSEC descriptor exactly as
+    `kernel_gsp_fwsec.c` does (`s_vbiosRead8/16/32`, `ucodeEntry.DescPtr`,
+    `expansionRomOffset`). No closed/unavailable ucode is required — unlike the
+    earlier (wrong) scrubber framing.
+
+  **So `0x91 → 0` is an implementation task, not a resource dead-end**, but a
+  large one (≈ a Phase-B-sized sub-project): §3.5 below. Once `MAILBOX0==0` +
+  `WPR2_ADDR_HI!=0` + `verified==0xa0a0…`, proceed to §4 (GSP kick + msgq +
+  `GSP_INIT_DONE`).
+
+### 3.5 FWSEC-FRTS — the confirmed path to clear `0x91` (open, but large)
+1. **Read the VBIOS** into a heap buffer via the `NV_PROM` expansion-ROM aperture
+   over BAR0 (in-kernel only; host `/sys/.../rom` returns 0 bytes — NVIDIA VBIOS
+   is SPI-flash behind `NV_PROM`, not the PCI expansion-ROM BAR). Verified on the
+   A5000 this session: both vfio-bound and unbound host reads yield 0 bytes.
+2. **Parse** PCI-ROM header → BIT structure → FALCON_UCODE table → the FWSEC
+   entry; extract the FWSEC image + `RM_FLCN_UCODE_DESC` (all in
+   `kernel_gsp_fwsec.c`, fully transcribable to Rust).
+3. **Sig-patch** FWSEC by fuse version (same `kgspReadUcodeFuseVersion` scheme
+   already implemented for the Booter).
+4. **DMA-load + run FWSEC-FRTS on the GSP falcon** (not SEC2), with the FRTS
+   command params (FB region addr/size); poll for completion. This executes
+   devinit and establishes FRTS + secure scratch.
+5. **Then run the Booter** (existing code) → expect `MAILBOX0==0`, `WPR2_HI!=0`.
 
 ---
 
