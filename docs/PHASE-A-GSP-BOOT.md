@@ -6,10 +6,20 @@ Asterinas `aster-nvidia` driver, cross-referenced to open-gpu-kernel-modules tag
 the front half of [CUDA-CONTAINER-PLAN.md](CUDA-CONTAINER-PLAN.md) Phase A.
 Everything below is source-confirmed unless marked `[INFERRED]`.
 
-**Status:** all inputs extracted + verified; sequence fully specified; the
-byte-exact code + hardware bring-up (iterate on `MAILBOX0` error codes until the
-booter authenticates) is the remaining work. Current code stops at
-`device/nvidia.rs:226` after P1.5b (radix3 + empty `GspFwWprMeta`).
+**Status (hardware-validated on a real RTX A5000; code on asterinas branch
+`cuda-p1.5c`):**
+- ✅ FB size read (`LOCAL_MEMORY_RANGE` → 16 GB, decode verified) + full WPR2
+  layout computed on hardware.
+- ✅ SEC2 booter run implemented: parse HS header, fuse-select + patch the RSA3K
+  signature, DMA the signed booter IMEM/DMEM into SEC2, program BROM PKC.
+- ✅ **The signed 610.43.02 booter executes on the real A5000** — SEC2 reset +
+  `kflcnSwitchToFalcon` releases the `0xbadf` priv lockdown (CPUCTL `0x10`), the
+  booter authenticates its own signature and halts.
+- ⏳ It returns ACR code `MAILBOX0=0x91` (`MAILBOX1=0x2`) — our WPR meta not yet
+  accepted. `0x91` lives in the *closed* booter, so `0x91 → 0` is trial-and-error
+  on the WPR-meta layout (candidates: `sysmemAddrOfSignature` currently 0; heap /
+  `nonWprHeap` sizes; region IDs). Once `MAILBOX0==0` + `WPR2_ADDR_HI!=0` +
+  `verified==0xa0a0…`, proceed to §4 (GSP kick + msgq + `GSP_INIT_DONE`).
 
 ---
 
