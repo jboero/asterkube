@@ -190,9 +190,15 @@ echo "==> initramfs done:"; ls -lh "$CPIO"
 
 if [ "${SKIP_ISO:-0}" != "1" ]; then
   echo "==> rebuilding ISO in the dev container"
+  # OSDK_FEATURES enables optional kernel cargo features (space/comma separated).
+  # Default is empty -> the 100% C-free build. Set OSDK_FEATURES=nvidia_gpu to
+  # compile the native NVIDIA GPU driver (the P1 GSP substrate) into the image.
+  OSDK_FEATURES=${OSDK_FEATURES:-}
+  FEAT_ARG=""; [ -n "$OSDK_FEATURES" ] && FEAT_ARG="--features $OSDK_FEATURES"
+  [ -n "$FEAT_ARG" ] && echo "    kernel features: $OSDK_FEATURES"
   docker start asterkube >/dev/null 2>&1 || true
   docker exec asterkube bash -lc \
-    'git config --global --add safe.directory /root/asterinas; cd /root/asterinas/kernel && cargo osdk build --release --strip-elf --grub-boot-protocol=multiboot2' \
+    "git config --global --add safe.directory /root/asterinas; cd /root/asterinas/kernel && cargo osdk build --release --strip-elf --grub-boot-protocol=multiboot2 $FEAT_ARG" \
     2>&1 | tail -2
   echo "==> ISO:"; ls -lh target/osdk/aster-kernel-osdk-bin.iso
 fi
